@@ -1,0 +1,31 @@
+# ─── Build artefacts ─────────────────────────────────────────────────────────
+# Per-arch libsmb2 binaries produced by `./build <platform>`.
+# Recreated on demand. Don't track them.
+release_builds/
+
+# Pinned upstream tarballs downloaded by prepare_libsmb2_sources().
+# Keyed by commit hash and SHA-256-verified — safe to wipe any time.
+sources/
+
+# Per-platform build trees produced by `build_libsmb2_<platform>.sh`.
+# Each script sets BUILD_DIR=$SCRIPT_DIR/build-<platform>; the trees hold
+# per-arch object files and intermediate static archives. Recreated on every
+# fresh build.
+scripts/build-macos/
+scripts/build-ios/
+scripts/build-linux/
+scripts/build-windows/
+scripts/build-android/
+
+# Generic build/prefix/src directories (Docker mounts, ad-hoc builds).
+build/
+prefix/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+
+# ─── IDE / OS noise ──────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.iml

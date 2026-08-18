@@ -1,0 +1,9 @@
+# Build scripts and the sources they feed run INSIDE Linux Docker
+# containers. They must be checked out with LF endings: on a Windows checkout
+# with core.autocrlf=true a CRLF script makes bash-in-Docker fail at line 1
+# ($'\r': command not found). Force LF regardless of the host's autocrlf.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.c         text eol=lf
+*.h         text eol=lf
+Dockerfile  text eol=lf
