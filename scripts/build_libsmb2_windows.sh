@@ -128,6 +128,7 @@ build_arch() {
     "$build"/*.o \
     -Wl,-Bstatic -lpthread \
     -lws2_32 \
+    -lbcrypt \
     -Wl,--export-all-symbols
 
   local output="$OUTPUT_DIR/libsmb2_windows-${arch}.dll"

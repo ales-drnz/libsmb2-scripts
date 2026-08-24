@@ -118,6 +118,8 @@ func allTargets() []Target {
 			Desc: "dlopen + FFI-symbol audit of the host-loadable binaries"},
 		{Key: "bump", Label: "Bump", Group: "Tools", InMenu: false, kind: kNative, script: "scripts/bump_version.sh",
 			Desc: "propagate LIB_VERSION / RELEASE_VERSION into dart_smb2"},
+		{Key: "sources", Label: "Sources", Group: "Tools", InMenu: true, kind: kNative, script: "scripts/export_sources.sh",
+			Desc: "export the patched libsmb2 tree for dart_smb2's ffigen"},
 
 		// ── Non-menu (CLI / internal) ──
 		{Key: "docker-image", Label: "Build the build-env image", Group: "Docker", InMenu: false, kind: kImage},

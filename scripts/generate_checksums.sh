@@ -62,9 +62,18 @@ update_cmake_arch_sha() {
 #   ),
 update_android_sha() {
   local gradle_file="$1" abi_filename="$2" new_hash="$3"
+  # \s+ around the `to`: the map is column-aligned ("file"   to ...), so a
+  # single-space pattern silently matches nothing.
   perl -i -0777 -pe \
-    "s|(\"file\" to \"\Q$abi_filename\E\",\s*\"sha256\" to \")[a-f0-9]{64}|\${1}$new_hash|" \
+    "s|(\"file\"\s+to\s+\"\Q$abi_filename\E\",\s*\"sha256\"\s+to\s+\")[a-f0-9]{64}|\${1}$new_hash|" \
     "$gradle_file"
+  # perl exits 0 whether or not it substituted anything. An unnoticed miss
+  # ships the previous release's hash against the new release URL, which
+  # breaks every consumer build — so confirm the new hash actually landed.
+  if ! grep -q "$new_hash" "$gradle_file"; then
+    echo "ERROR: SHA-256 for $abi_filename not updated in $(basename "$gradle_file") (anchor drifted?)" >&2
+    return 1
+  fi
 }
 
 echo "=== dart_smb2: updating checksums + copying libraries ==="
@@ -122,7 +131,8 @@ for abi in arm64-v8a armeabi-v7a x86_64; do
     DEST="$ROOT/android/src/main/jniLibs/$abi"
     mkdir -p "$DEST"
     cp "$FILE" "$DEST/libsmb2.so"
-    update_android_sha "$GRADLE" "libsmb2_android-${abi}.so" "$HASH"
+    update_android_sha "$GRADLE" "libsmb2_android-${abi}.so" "$HASH" \
+      || errors=$((errors + 1))
     printf "  android %-13s %s\n" "$abi:" "$HASH"
     echo "    -> android/src/main/jniLibs/$abi/libsmb2.so"
   else

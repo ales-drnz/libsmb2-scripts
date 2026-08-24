@@ -89,6 +89,22 @@
 #define HAVE_ERRNO_H 1
 #define HAVE_INTTYPES_H 1
 #define STDC_HEADERS 1
+/*
+ * Windows has no arc4random/getrandom//dev/urandom, so without this
+ * smb2_random_bytes() would fall back to rand() for the NTLMv2 client
+ * challenge, the preauth salt and the AES-CCM nonce. CNG's
+ * BCryptGenRandom() is the system CSPRNG; needs -lbcrypt.
+ */
+#define HAVE_BCRYPT_GENRANDOM 1
+/*
+ * POSIX functions the Windows CRT does not provide. lib/compat.c ships
+ * implementations behind these NEED_* switches (its _WINDOWS block maps
+ * them onto rand()/srand()/GetCurrentProcessId()); without them
+ * lib/init.c fails to link with undefined random/srandom/getlogin_r.
+ */
+#define NEED_RANDOM 1
+#define NEED_SRANDOM 1
+#define NEED_GETLOGIN_R 1
 #else /* Linux (glibc — both docker cross toolchains) */
 #define HAVE_ARPA_INET_H 1
 #define HAVE_DLFCN_H 1
