@@ -8,4 +8,4 @@ package main
 // tracked independently of the libsmb2 commit it builds (LIBSMB2_COMMIT in
 // scripts/shared/_versions.sh) and of the dart_smb2 package it installs
 // into. Shown in the header; bumped together with CHANGELOG.md.
-const version = "0.1.2"
+const version = "0.1.3"

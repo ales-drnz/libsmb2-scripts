@@ -2,7 +2,7 @@
 
 #### Patched libsmb2, built for every platform.
 
-[![](https://img.shields.io/badge/libsmb2--scripts-0.1.2-7DCFFF.svg?style=for-the-badge)](CHANGELOG.md)
+[![](https://img.shields.io/badge/libsmb2--scripts-0.1.3-7DCFFF.svg?style=for-the-badge)](CHANGELOG.md)
 [![](https://img.shields.io/badge/libsmb2-master%202026--08--14-orange.svg?style=for-the-badge)](https://github.com/sahlberg/libsmb2)
 [![](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/github/stars/ales-drnz/libsmb2-scripts?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ales-drnz/libsmb2-scripts)
@@ -99,7 +99,8 @@ Each binary statically links the patched libsmb2 into the `smb2_wrapper.c` share
 
     * [6.1 Where results go](#61-where-results-go)
     * [6.2 Installing into dart_smb2](#62-installing-into-dart_smb2)
-    * [6.3 Verifying the binaries](#63-verifying-the-binaries)
+    * [6.3 Local or remote libs](#63-local-or-remote-libs)
+    * [6.4 Verifying the binaries](#64-verifying-the-binaries)
 
     </details>
 
@@ -175,7 +176,7 @@ Move with the **arrow keys**, toggle a target with **Space**, then go to the **B
 
 #### 3.1 Build tab
 
-All targets, grouped by OS, plus the **Tools** row (Checksums, Verify). While a queue runs you get one row per target with a live tick/spinner and a scrolling log tail; the queue stops at the first failure, like `make`.
+All targets, grouped by OS, plus the **Tools** row (Checksums, Verify, Sources, and the Libs local / remote / clean switch — see [§6.3](#63-local-or-remote-libs)). While a queue runs you get one row per target with a live tick/spinner and a scrolling log tail; the queue stops at the first failure, like `make`.
 
 #### 3.2 Patches tab
 
@@ -228,6 +229,8 @@ Any menu target works headlessly, and they chain left to right, stopping at the 
 ./build macos verify       # build macOS, then verify
 ./build list               # every target and whether it can run here
 ./build patches            # the patch set, one line each
+./build android lib-local  # build Android, install it, use only the local libs
+./build lib-remote         # back to downloading from GitHub Releases
 ```
 
 #### 5.2 Build knobs
@@ -262,7 +265,19 @@ Build scripts emit **only** to `release_builds/` (gitignored). Nothing touches t
 
 Plus the matching SHA-256 written into `build.gradle.kts`, `CMakeLists.txt`, the podspec and `Package.swift` for every consumer.
 
-#### 6.3 Verifying the binaries
+#### 6.3 Local or remote libs
+
+By default `dart_smb2` downloads each platform's binary from its GitHub release, and **re-downloads over a local copy whose SHA-256 does not match** — so a hand-copied, locally built library is silently replaced by the published one. To test a patched engine, switch the package to local libs:
+
+| Action | Effect |
+| :--- | :--- |
+| `./build lib-local` | runs Checksums (best-effort: binaries not built on this host are skipped), then comments out the SHA check + download in every consumer build file and points SwiftPM at `Frameworks/libsmb2.xcframework` — the bundled libs are used as-is and never replaced |
+| `./build lib-remote` | re-enables the download path and SwiftPM's `url:` + `checksum:` target |
+| `./build lib-clean` | deletes the bundled libs from every platform slot, so a remote build has nothing stale to fall back to |
+
+The switch works on `smb2kit:local:*` / `smb2kit:remote:*` marker regions in `build.gradle.kts`, both `CMakeLists.txt`, both podspecs and both `Package.swift` files — don't hand-edit the markers. Switch back to **remote** before committing or publishing `dart_smb2`.
+
+#### 6.4 Verifying the binaries
 
 `./build verify` dlopens every binary loadable on the current host and resolves the **complete FFI symbol surface** `dart_smb2` binds — the `smb2w_*` wrapper API plus the patched-in `smb2_utimes` family. Cross-compiled binaries for other OSes are listed and skipped.
 

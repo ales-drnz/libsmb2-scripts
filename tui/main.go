@@ -40,6 +40,13 @@ func main() {
 		case "patches":
 			printPatches(ctx)
 			return
+		case "_liblocal", "_libremote", "_libclean":
+			key := "lib-" + strings.TrimPrefix(args[0], "_lib")
+			if err := runLibAction(ctx, key, func(l string) { fmt.Println(l) }); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			return
 		default:
 			os.Exit(runCLI(args, ctx))
 		}

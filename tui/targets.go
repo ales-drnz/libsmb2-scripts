@@ -13,6 +13,7 @@ const (
 	kDocker                 // bash script inside the libsmb2-builder container
 	kImage                  // docker build of the build-env image
 	kAggregate              // expands to other targets
+	kSelf                   // the orchestrator itself, via a hidden subcommand
 )
 
 // Target is one buildable / publishable step. It carries everything needed to
@@ -29,6 +30,7 @@ type Target struct {
 	script  string
 	env     []string // extra "K=V" pairs (ARCHS / ABIS selectors)
 	members []string // for kAggregate
+	selfArg string   // for kSelf: the hidden subcommand (e.g. "_liblocal")
 }
 
 // hostOS is the OS the orchestrator runs on. A package var so tests can
@@ -120,6 +122,14 @@ func allTargets() []Target {
 			Desc: "propagate LIB_VERSION / RELEASE_VERSION into dart_smb2"},
 		{Key: "sources", Label: "Sources", Group: "Tools", InMenu: true, kind: kNative, script: "scripts/export_sources.sh",
 			Desc: "export the patched libsmb2 tree for dart_smb2's ffigen"},
+
+		// ── Libs source switch for dart_smb2 (see libmode.go) ──
+		{Key: "lib-local", Label: "Libs local", Group: "Tools", InMenu: true, kind: kSelf, selfArg: "_liblocal",
+			Desc: "install built libs, then use them only — never download from GitHub"},
+		{Key: "lib-remote", Label: "Libs remote", Group: "Tools", InMenu: true, kind: kSelf, selfArg: "_libremote",
+			Desc: "download from GitHub Releases when a local lib is missing or stale"},
+		{Key: "lib-clean", Label: "Libs clean", Group: "Tools", InMenu: true, kind: kSelf, selfArg: "_libclean",
+			Desc: "remove the bundled libs from every platform slot"},
 
 		// ── Non-menu (CLI / internal) ──
 		{Key: "docker-image", Label: "Build the build-env image", Group: "Docker", InMenu: false, kind: kImage},

@@ -21,8 +21,8 @@
 # Edit these two variables, then run the script:
 # =============================================================================
 
-LIB_VERSION="0.1.2"           # Library version (pubspec, podspecs, gradle)
-RELEASE_VERSION="libsmb2-r7"  # Binary release tag (GitHub release download URL)
+LIB_VERSION="0.1.3"           # Library version (pubspec, podspecs, gradle)
+RELEASE_VERSION="libsmb2-r8"  # Binary release tag (GitHub release download URL)
 
 # =============================================================================
 
@@ -98,4 +98,4 @@ sedi "s|dart_smb2: \^[0-9][0-9.+-]*|dart_smb2: ^$LIB_VERSION|" "$ROOT/README.md"
 echo "  README.md install snippet   -> $LIB_VERSION"
 
 echo ""
-echo "Done. Run 'make checksums' after building to update SHA-256 hashes."
+echo "Done. Run './build checksums' after building to update SHA-256 hashes."

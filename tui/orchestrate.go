@@ -123,12 +123,29 @@ func (c *buildCtx) command(t Target) *exec.Cmd {
 		cmd.Dir = c.scriptsRoot
 		return cmd
 
+	case kSelf:
+		// Re-exec the orchestrator with a hidden subcommand (Go-side steps like
+		// the Libs switch) — no bash or Docker needed.
+		cmd := exec.Command(selfExe(), t.selfArg)
+		cmd.Dir = c.scriptsRoot
+		cmd.Env = os.Environ()
+		return cmd
+
 	default: // kNative
 		cmd := exec.Command("bash", "./"+t.script)
 		cmd.Dir = c.scriptsRoot
 		cmd.Env = append(os.Environ(), append(c.knobEnv(), t.env...)...)
 		return cmd
 	}
+}
+
+// selfExe returns the path to the running orchestrator binary, so kSelf
+// targets can re-exec it with a hidden subcommand.
+func selfExe() string {
+	if exe, err := os.Executable(); err == nil {
+		return exe
+	}
+	return os.Args[0]
 }
 
 // dockerImageMissing reports whether the build-env image needs building.

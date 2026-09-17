@@ -59,6 +59,13 @@ EXAMPLES
   ./build linux windows            # desktop cross builds (Docker)
   ./build macos verify             # build macOS, then verify
   ./build all                      # everything + checksums
+  ./build android lib-local        # build, install, and use the local libs
+  ./build lib-remote               # back to downloading from GitHub Releases
+
+LIBS SOURCE (dart_smb2)
+  lib-local    install built libs + never download (test a patched engine)
+  lib-remote   download from GitHub Releases when a local lib is absent/stale
+  lib-clean    remove the bundled libs from every platform slot
 
 KNOBS (env, forwarded into Docker builds)
   JOBS=N  KEEP_BUILD=1  FORCE_DOWNLOAD=1
