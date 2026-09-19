@@ -1,14 +1,14 @@
-## [0.1.3] - 17-09-2026
+## [0.1.3] - 19-09-2026
 
 ### Fixed
-- `smb2_timeout_pdus()` freed timed-out requests the synchronous `smb2_open()` / `smb2_opendir()` still owned (`caller_frees_pdu`), so an open or directory listing that hit the timeout was freed twice and aborted the process ([dart_smb2#3](https://github.com/ales-drnz/dart_smb2/issues/3), upstream [sahlberg/libsmb2#484](https://github.com/sahlberg/libsmb2/issues/484)). New patch `patch_timeout_caller_frees.py` applies the guard the reply path already uses.
-- Every synchronous `smb2_open()` leaked its 16-byte callback data: upstream passes `free_cb` to `smb2_open_async_pdu()`, which never stores it. New patch `patch_sync_open_cb_data_leak.py` makes `smb2_open()` free it on both return paths.
+- `smb2_timeout_pdus()` freed timed-out requests that the synchronous `smb2_open()` / `smb2_opendir()` still owned, so an open or directory listing that hit the timeout was freed twice and aborted the process ([dart_smb2#3](https://github.com/ales-drnz/dart_smb2/issues/3), upstream [sahlberg/libsmb2#484](https://github.com/sahlberg/libsmb2/issues/484)). `patch_timeout_caller_frees.py` applies the `caller_frees_pdu` guard the reply path already uses.
+- Every synchronous `smb2_open()` leaked its callback data: upstream takes a `free_cb` it never stores. `patch_sync_open_cb_data_leak.py` frees it in `smb2_open()`, which owns it.
 
 ### Added
-- Libs source switch, same as libmpv-scripts: `lib-local` (install the built libs and never download), `lib-remote` (download from GitHub Releases) and `lib-clean` (remove the bundled libs), in the Tools row and on the command line. It drives `smb2kit:` marker regions in dart_smb2's build files, so a locally built library is no longer silently replaced by the published one because its SHA-256 differs.
+- Libs source switch, as in libmpv-scripts: `lib-local` (install the built libs and never download), `lib-remote` (download from GitHub Releases) and `lib-clean` (remove the bundled libs), in the Tools row and on the command line. It drives `smb2kit:` marker regions in dart_smb2's build files, so a locally built library is no longer silently replaced by the published one because its SHA-256 differs.
 
 ### Changed
-- `bump_version.sh` → dart_smb2 `0.1.3`, binaries `libsmb2-r8`.
+- dart_smb2 `0.1.3`, binaries `libsmb2-r8`.
 
 ## [0.1.2] - 24-08-2026
 
