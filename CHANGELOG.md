@@ -1,7 +1,7 @@
 ## [0.1.3] - 19-09-2026
 
 ### Fixed
-- `smb2_timeout_pdus()` freed timed-out requests that the synchronous `smb2_open()` / `smb2_opendir()` still owned, so an open or directory listing that hit the timeout was freed twice and aborted the process ([dart_smb2#3](https://github.com/ales-drnz/dart_smb2/issues/3), upstream [sahlberg/libsmb2#484](https://github.com/sahlberg/libsmb2/issues/484)). `patch_timeout_caller_frees.py` applies the `caller_frees_pdu` guard the reply path already uses.
+- `smb2_timeout_pdus()` freed timed-out requests that the synchronous `smb2_open()` / `smb2_opendir()` still owned, so an open or directory listing that hit the timeout was freed twice and aborted the process (dart_smb2 [#3](https://github.com/ales-drnz/dart_smb2/issues/3), upstream [sahlberg/libsmb2#484](https://github.com/sahlberg/libsmb2/issues/484)). `patch_timeout_caller_frees.py` applies the `caller_frees_pdu` guard the reply path already uses.
 - Every synchronous `smb2_open()` leaked its callback data: upstream takes a `free_cb` it never stores. `patch_sync_open_cb_data_leak.py` frees it in `smb2_open()`, which owns it.
 
 ### Added
