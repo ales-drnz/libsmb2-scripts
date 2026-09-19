@@ -5,7 +5,7 @@
 - Every synchronous `smb2_open()` leaked its callback data: upstream takes a `free_cb` it never stores. `patch_sync_open_cb_data_leak.py` frees it in `smb2_open()`, which owns it.
 
 ### Added
-- Libs source switch, as in libmpv-scripts: `lib-local` (install the built libs and never download), `lib-remote` (download from GitHub Releases) and `lib-clean` (remove the bundled libs), in the Tools row and on the command line. It drives `smb2kit:` marker regions in dart_smb2's build files, so a locally built library is no longer silently replaced by the published one because its SHA-256 differs.
+- Libs source switch, as in libmpv-scripts: `lib-local` (install the built libs and never download), `lib-remote` (download from GitHub Releases) and `lib-clean` (remove the bundled libs), in the Tools row and on the command line. It comments / uncomments the `smb2kit:` marker regions it adds to dart_smb2's `build.gradle.kts`, both `CMakeLists.txt`, both podspecs and both `Package.swift`, so a locally built library is no longer silently replaced by the published one because its SHA-256 differs.
 
 ### Changed
 - dart_smb2 `0.1.3`, binaries `libsmb2-r8`.
