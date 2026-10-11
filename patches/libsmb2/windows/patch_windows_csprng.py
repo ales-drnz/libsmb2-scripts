@@ -32,6 +32,9 @@ size_t, and on Win64 a >4 GiB request would otherwise truncate.
 Requires -lbcrypt at link time and HAVE_BCRYPT_GENRANDOM from config.h.
 
 Touches: lib/init.c
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os

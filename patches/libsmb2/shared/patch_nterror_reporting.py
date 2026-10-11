@@ -15,6 +15,9 @@ Adds smb2_set_nterror() at the failure sites upstream missed:
   - the generic open/create callback ("Create failed with status ...")
   - smb2_stat_async CREATE failure and compound-status failure
   - smb2_truncate_async compound-status failure
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os

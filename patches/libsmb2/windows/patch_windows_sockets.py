@@ -19,6 +19,9 @@ Also:
     consumers don't drag the whole Win32 API (and its macro pollution) in.
 
 Touches: lib/socket.c, include/smb2/libsmb2.h
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os

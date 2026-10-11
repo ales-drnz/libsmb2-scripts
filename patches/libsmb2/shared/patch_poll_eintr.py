@@ -10,6 +10,9 @@ routinely, and Dart FFI calls run the sync API on a helper isolate — an
 EINTR there surfaced as a spurious "Poll failed" error mid-transfer.
 
 Standard EINTR retry loop; every other poll() failure still errors out.
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os

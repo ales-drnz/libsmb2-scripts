@@ -18,6 +18,9 @@ Touches:
   lib/libsmb2.c           — smb2_utimes_async implementation
   lib/sync.c              — smb2_utimes sync wrapper
   lib/libsmb2.syms        — export list entries
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os

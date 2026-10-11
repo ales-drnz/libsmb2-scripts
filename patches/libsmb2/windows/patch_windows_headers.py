@@ -44,6 +44,9 @@ at all, so pulling config.h in changes nothing beyond making the NEED_*
 switches visible.
 
 Touches: include/asprintf.h, lib/compat.c
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os

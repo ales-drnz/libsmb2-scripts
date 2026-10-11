@@ -12,6 +12,9 @@ real one that was already set on the context.
 
 Bail out of the loop (successfully — the real error is already recorded)
 when the socket is gone after PDU processing.
+
+The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
+under libsmb2's LGPL-2.1-or-later.
 """
 import sys
 import os
