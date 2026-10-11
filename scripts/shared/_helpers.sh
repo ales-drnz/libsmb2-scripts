@@ -5,6 +5,10 @@
 # Shared helpers for the build_libsmb2_<platform>.sh scripts.
 # Sourced by every script. Do not run directly.
 
+# Globs (sources, objects to link) sort by the locale's collation, and the
+# link order lands in the binary: pin it so every machine links the same.
+export LC_ALL=C
+
 # ── libsmb2-scripts repo root ────────────────────────────────────────────────
 # Self-locating: this file lives at <repo>/scripts/shared/_helpers.sh, so the
 # repo root is two levels up. Used to anchor release_builds/, sources/ and
