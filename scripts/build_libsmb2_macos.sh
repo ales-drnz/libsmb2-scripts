@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
+# Copyright © 2026 & onwards, Alessandro Di Ronza <ales.drnz@gmail.com>.
+# All rights reserved.
+# Use of this source code is governed by BSD 3-Clause license that can be found in the LICENSE file.
+
 # =============================================================================
-# build_macos.sh
+# build_libsmb2_macos.sh
 #
-# Compiles libsmb2 + smb2_wrapper.c into a dynamic libsmb2.framework wrapped
-# in an xcframework for macOS (arm64 + x86_64 universal).
+# Compiles libsmb2 into a dynamic libsmb2.framework for macOS (arm64 +
+# x86_64 universal), wrapped in an xcframework.
 #
-# Output:  release_builds/libsmb2_macos.xcframework.zip
-# Source:  src/smb2_wrapper.c + pinned libsmb2 (fetched + patched at build time)
+# Output: release_builds/libsmb2_macos.xcframework.zip
 #
-# Usage:
-#   chmod +x scripts/build_macos.sh
-#   ./scripts/build_macos.sh
+# Target: macOS 10.15+ (Flutter's floor). Needs macOS with Xcode.
 #
-# Options:
-#   DEPLOYMENT_TARGET=10.14   (default: 10.14)
+# Usage (from the repo root): scripts/build_libsmb2_macos.sh
+#
+# Options (environment variables):
+#   DEPLOYMENT_TARGET=10.15  Minimum macOS version
+#   JOBS=N                   Parallel compile jobs (default: all cores)
+#   KEEP_BUILD=1             Do not delete the intermediate build directory
 # =============================================================================
 
 set -euo pipefail
@@ -22,89 +27,45 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/shared/_helpers.sh"
 source "$SCRIPT_DIR/shared/_versions.sh"
 OUTPUT_DIR="$LIBSMB2_SCRIPTS_ROOT/release_builds"
-
-DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET:-10.14}"
-
 BUILD_DIR="${BUILD_DIR:-$SCRIPT_DIR/build-macos}"
-
-# ── Fetch + patch sources ────────────────────────────────────────────────────
+DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET:-10.15}"
 
 echo "=== libsmb2: preparing sources ==="
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 prepare_libsmb2_sources "$BUILD_DIR"
+libsmb2_sources
+write_export_lists "$BUILD_DIR"
 
-SOURCES=("$LIBSMB2_SCRIPTS_ROOT/src/smb2_wrapper.c")
-for f in "$SMB2_SRC"/lib/*.c; do
-  case "$(basename "$f")" in
-    krb5-wrapper.c) continue ;;
-    *) SOURCES+=("$f") ;;
-  esac
-done
-
-INCLUDES=(
-  "-I$SMB2_SRC/include"
-  "-I$SMB2_SRC/include/smb2"
-  "-I$SMB2_SRC/lib"
-)
-
-CFLAGS=(
-  -O2
-  -DHAVE_CONFIG_H=1
-  -fPIC
-  -w
-)
-
-echo "=== libsmb2: building dynamic libsmb2.xcframework for macOS ==="
+echo "=== libsmb2: building libsmb2.xcframework for macOS ==="
 echo "    Sources: ${#SOURCES[@]} files"
 
-# ── Build function ───────────────────────────────────────────────────────────
-
 build_arch() {
-  local arch="$1"
-  local build="$BUILD_DIR/$arch"
-  rm -rf "$build"
-  mkdir -p "$build"
-
-  echo "  Compiling for $arch..."
-  for src in "${SOURCES[@]}"; do
-    local name
-    name="$(basename "${src%.c}").o"
-    xcrun clang -c "$src" \
-      -arch "$arch" \
-      -mmacosx-version-min="$DEPLOYMENT_TARGET" \
-      "${INCLUDES[@]}" \
-      "${CFLAGS[@]}" \
-      -o "$build/$name" &
-  done
-  wait
+  local arch="$1" dir="$BUILD_DIR/$1"
+  rm -rf "$dir"
+  echo "  Compiling $arch..."
+  compile_objects "$dir" xcrun clang -- -arch "$arch" -mmacosx-version-min="$DEPLOYMENT_TARGET"
 
   echo "  Linking $arch..."
-  xcrun clang \
-    -arch "$arch" \
-    -mmacosx-version-min="$DEPLOYMENT_TARGET" \
+  xcrun clang -arch "$arch" -mmacosx-version-min="$DEPLOYMENT_TARGET" \
     -dynamiclib \
     -install_name "@rpath/libsmb2.framework/libsmb2" \
-    -o "$build/libsmb2" \
-    "$build"/*.o
+    -compatibility_version 1 -current_version 1 \
+    -Wl,-exported_symbols_list,"$BUILD_DIR/exports.txt" \
+    -o "$dir/libsmb2" "$dir"/*.o
 }
-
-# ── Build all archs + fat ────────────────────────────────────────────────────
 
 build_arch arm64
 build_arch x86_64
 
-mkdir -p "$BUILD_DIR/fat"
-echo "  Lipo arm64 + x86_64..."
-xcrun lipo -create "$BUILD_DIR/arm64/libsmb2" "$BUILD_DIR/x86_64/libsmb2" \
-  -output "$BUILD_DIR/fat/libsmb2"
-
-# ── Assemble the .framework bundle (macOS layout: Versions/A) ────────────────
-
+# The framework uses the macOS layout: Versions/A plus the Current and
+# top-level symlinks, which the zip below keeps (-y).
 FW="$BUILD_DIR/libsmb2.framework"
 rm -rf "$FW"
 mkdir -p "$FW/Versions/A/Resources"
-cp "$BUILD_DIR/fat/libsmb2" "$FW/Versions/A/libsmb2"
+echo "  Lipo arm64 + x86_64..."
+xcrun lipo -create "$BUILD_DIR/arm64/libsmb2" "$BUILD_DIR/x86_64/libsmb2" \
+  -output "$FW/Versions/A/libsmb2"
 
 cat > "$FW/Versions/A/Resources/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -117,48 +78,34 @@ cat > "$FW/Versions/A/Resources/Info.plist" <<PLIST
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>libsmb2</string>
   <key>CFBundlePackageType</key><string>FMWK</string>
-  <key>CFBundleShortVersionString</key><string>6.1.0</string>
-  <key>CFBundleVersion</key><string>6.1.0</string>
+  <key>CFBundleShortVersionString</key><string>${LIBSMB2_BUNDLE_VERSION}</string>
+  <key>CFBundleVersion</key><string>${LIBSMB2_BUNDLE_VERSION}</string>
+  <key>LSMinimumSystemVersion</key><string>${DEPLOYMENT_TARGET}</string>
 </dict>
 </plist>
 PLIST
 
-# Symlinks: Versions/Current -> A, then top-level libsmb2/Resources -> Versions/Current/...
 (cd "$FW/Versions" && ln -sfh A Current)
 (cd "$FW" && ln -sfh Versions/Current/libsmb2 libsmb2 && ln -sfh Versions/Current/Resources Resources)
-
-# ── Create xcframework ───────────────────────────────────────────────────────
 
 echo ""
 echo "  Creating xcframework..."
 mkdir -p "$OUTPUT_DIR"
 rm -rf "$OUTPUT_DIR/libsmb2.xcframework"
-
-xcodebuild -create-xcframework \
-  -framework "$FW" \
-  -output "$OUTPUT_DIR/libsmb2.xcframework"
-
-# ── Verify ───────────────────────────────────────────────────────────────────
+xcodebuild -create-xcframework -framework "$FW" -output "$OUTPUT_DIR/libsmb2.xcframework"
 
 echo ""
 echo "Slice:"
-xcrun lipo -info "$OUTPUT_DIR/libsmb2.xcframework"/*/libsmb2.framework/Versions/A/libsmb2 2>/dev/null || \
-xcrun lipo -info "$OUTPUT_DIR/libsmb2.xcframework"/*/libsmb2.framework/libsmb2 2>/dev/null
-
-# ── Zip ──────────────────────────────────────────────────────────────────────
+xcrun lipo -info "$OUTPUT_DIR"/libsmb2.xcframework/*/libsmb2.framework/Versions/A/libsmb2
 
 echo ""
 echo "  Zipping xcframework..."
 rm -f "$OUTPUT_DIR/libsmb2_macos.xcframework.zip"
-# -y preserves symlinks (Versions/Current → A, libsmb2 → Versions/Current/libsmb2)
-# which are required by macOS framework loaders.
-(cd "$OUTPUT_DIR" && zip -r -y -q libsmb2_macos.xcframework.zip libsmb2.xcframework)
+(cd "$OUTPUT_DIR" && zip -r -y -X -q libsmb2_macos.xcframework.zip libsmb2.xcframework)
 rm -rf "$OUTPUT_DIR/libsmb2.xcframework"
 
 echo ""
 echo "=== Done ==="
 echo "Output: $OUTPUT_DIR/libsmb2_macos.xcframework.zip ($(du -h "$OUTPUT_DIR/libsmb2_macos.xcframework.zip" | cut -f1))"
 
-# ── Cleanup ──────────────────────────────────────────────────────────────────
-
-rm -rf "$BUILD_DIR"
+if [ "${KEEP_BUILD:-0}" != "1" ]; then rm -rf "$BUILD_DIR"; fi

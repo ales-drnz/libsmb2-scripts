@@ -1,90 +1,14 @@
+# Copyright © 2026 & onwards, Alessandro Di Ronza <ales.drnz@gmail.com>.
+# All rights reserved.
+# Use of this source code is governed by BSD 3-Clause license that can be found in the LICENSE file.
+
 # Shared helpers for the build_libsmb2_<platform>.sh scripts.
 # Sourced by every script. Do not run directly.
 
-# ── Repo root resolution ─────────────────────────────────────────────────────
-# Locates the `dart_smb2` Flutter package this build infrastructure targets.
-# Build outputs (libraries, generated Dart sources, fixtures) all land under
-# the repo root resolved here.
-#
-# Self-locating + depth-agnostic: walks up the directory tree from this
-# file's location, at each ancestor checking for a sibling `dart_smb2/`.
-#
-# Resolution order:
-#   1. $DART_SMB2_ROOT — explicit override (used by Docker runs where /repo
-#                       is bind-mounted).
-#   2. Walk up from <helpers_dir>; at each ancestor check for a sibling
-#      `dart_smb2/` whose pubspec.yaml has `name: dart_smb2`.
-#   3. Walk up from <helpers_dir>; at each ancestor check the directory
-#      itself (legacy nested layout, when this infrastructure used to live
-#      inside `dart_smb2/scripts/`).
-#
-# Errors out with an actionable message when no candidate is valid.
-resolve_repo_root() {
-  local helpers_dir
-  helpers_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local candidate
-
-  if [[ -n "${DART_SMB2_ROOT:-}" ]]; then
-    candidate="$DART_SMB2_ROOT"
-    _validate_repo_root "$candidate" "DART_SMB2_ROOT" || return 1
-    (cd "$candidate" && pwd)
-    return 0
-  fi
-
-  # Walk up looking for a sibling `dart_smb2/` (production layout).
-  local search="$helpers_dir"
-  while [[ "$search" != "/" ]]; do
-    candidate="$search/../dart_smb2"
-    if [[ -f "$candidate/pubspec.yaml" ]] && \
-       grep -q "^name: dart_smb2" "$candidate/pubspec.yaml" 2>/dev/null; then
-      (cd "$candidate" && pwd)
-      return 0
-    fi
-    search="$(dirname "$search")"
-  done
-
-  # Walk up looking for an ancestor that IS the dart_smb2 checkout
-  # (legacy layout, scripts nested inside the package).
-  search="$helpers_dir"
-  while [[ "$search" != "/" ]]; do
-    if [[ -f "$search/pubspec.yaml" ]] && \
-       grep -q "^name: dart_smb2" "$search/pubspec.yaml" 2>/dev/null; then
-      (cd "$search" && pwd)
-      return 0
-    fi
-    search="$(dirname "$search")"
-  done
-
-  echo "ERROR: cannot locate the dart_smb2 repo." >&2
-  echo "Tried walking up from $helpers_dir:" >&2
-  echo "  - looking for a sibling dart_smb2/ at every ancestor" >&2
-  echo "  - looking for a dart_smb2 ancestor (legacy nested layout)" >&2
-  echo "" >&2
-  echo "Set DART_SMB2_ROOT=/absolute/path/to/dart_smb2" >&2
-  return 1
-}
-
-_validate_repo_root() {
-  local path="$1" source="$2"
-  if [[ ! -d "$path" ]]; then
-    echo "ERROR: $source points at a non-existent path: $path" >&2
-    return 1
-  fi
-  if [[ ! -f "$path/pubspec.yaml" ]]; then
-    echo "ERROR: $source does not contain pubspec.yaml: $path" >&2
-    return 1
-  fi
-  if ! grep -q "^name: dart_smb2" "$path/pubspec.yaml" 2>/dev/null; then
-    echo "ERROR: $source pubspec.yaml is not the dart_smb2 package: $path" >&2
-    return 1
-  fi
-  return 0
-}
-
 # ── libsmb2-scripts repo root ────────────────────────────────────────────────
 # Self-locating: this file lives at <repo>/scripts/shared/_helpers.sh, so the
-# repo root is two levels up. Used to anchor release_builds/, src/, docker/,
-# etc. (all top-level under libsmb2-scripts/).
+# repo root is two levels up. Used to anchor release_builds/, sources/ and
+# patches/.
 LIBSMB2_SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export LIBSMB2_SCRIPTS_ROOT
 
@@ -148,4 +72,77 @@ prepare_libsmb2_sources() {
       python3 "$p" "$SMB2_SRC"
     done
   done
+}
+
+# ── Shared compile + link pieces ─────────────────────────────────────────────
+# Every platform compiles the same sources with the same flags; only the
+# compiler, the target flags and the link step differ.
+
+# libsmb2_sources — sets SOURCES to every lib/*.c of the patched tree except
+# the Kerberos wrapper (no GSSAPI here). Call after prepare_libsmb2_sources.
+libsmb2_sources() {
+  SOURCES=()
+  local f
+  for f in "$SMB2_SRC"/lib/*.c; do
+    case "$(basename "$f")" in
+      krb5-wrapper.c) continue ;;
+      *) SOURCES+=("$f") ;;
+    esac
+  done
+  LIBSMB2_INCLUDES=(
+    "-I$SMB2_SRC/include"
+    "-I$SMB2_SRC/include/smb2"
+    "-I$SMB2_SRC/lib"
+  )
+  # -w: upstream's own warnings (mostly unused parameters) are not ours to
+  # fix and would bury anything the patches introduce in the build log.
+  LIBSMB2_CFLAGS=(-O2 -DHAVE_CONFIG_H=1 -fPIC -w)
+}
+
+# compile_objects <out_dir> <cc...> -- <flags...>
+# Compiles SOURCES into <out_dir>/<name>.o, JOBS compilers at a time. The
+# compiler may be several words (`xcrun clang`); `--` ends it. Waits on each
+# PID so a failing compile stops the build, and avoids `wait -n`, which the
+# bash 3.2 that macOS ships does not have.
+compile_objects() {
+  local out="$1"; shift
+  local cc=()
+  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do cc+=("$1"); shift; done
+  [ "$#" -gt 0 ] && shift
+  local jobs="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)}"
+  mkdir -p "$out"
+  local pids=() status=0 src pid
+  for src in "${SOURCES[@]}"; do
+    "${cc[@]}" -c "$src" "${LIBSMB2_INCLUDES[@]}" "${LIBSMB2_CFLAGS[@]}" "$@" \
+      -o "$out/$(basename "${src%.c}").o" &
+    pids+=($!)
+    if [ "${#pids[@]}" -ge "$jobs" ]; then
+      for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+      pids=()
+    fi
+  done
+  for pid in "${pids[@]+"${pids[@]}"}"; do wait "$pid" || status=1; done
+  [ "$status" -eq 0 ] || { echo "error: compilation failed" >&2; return 1; }
+}
+
+# write_export_lists <dir>
+# Turns upstream's lib/libsmb2.syms (every public function, plus the
+# patched-in smb2_utimes family) into the three linker formats, so each
+# binary exports libsmb2's public API and nothing else:
+#   <dir>/exports.ver  ELF version script (Linux, Android)
+#   <dir>/exports.def  module-definition file (Windows)
+#   <dir>/exports.txt  exported-symbols list (Apple, leading underscore)
+write_export_lists() {
+  local dir="$1" syms="$SMB2_SRC/lib/libsmb2.syms"
+  [ -f "$syms" ] || { echo "error: $syms not found" >&2; return 1; }
+  mkdir -p "$dir"
+  {
+    echo "{"
+    echo "  global:"
+    sed -e '/^[[:space:]]*$/d' -e 's/.*/    &;/' "$syms"
+    echo "  local: *;"
+    echo "};"
+  } > "$dir/exports.ver"
+  { echo "EXPORTS"; sed -e '/^[[:space:]]*$/d' -e 's/^/    /' "$syms"; } > "$dir/exports.def"
+  sed -e '/^[[:space:]]*$/d' -e 's/^/_/' "$syms" > "$dir/exports.txt"
 }
