@@ -2,11 +2,10 @@
 # All rights reserved.
 # Use of this source code is governed by BSD 3-Clause license that can be found in the LICENSE file.
 
-"""Header hygiene for llvm-mingw: asprintf fallbacks + close()/closesocket order.
+"""Header hygiene for llvm-mingw: asprintf fallbacks + config.h in compat.c.
 
-Two upstream assumptions break under the llvm-mingw toolchain we build with.
-Upstream never sees either one because it does not build libdcerpc on Windows
-and targets older mingw runtimes.
+Two upstream assumptions break under the llvm-mingw toolchain we build with,
+which is newer than the mingw runtimes upstream targets.
 
 1. include/asprintf.h — asprintf/vasprintf redefinition
 ------------------------------------------------------
@@ -27,27 +26,7 @@ function that was never defined:
 Upstream's own guard shows the intent: mingw supplies these itself. Extend
 that same condition to the two fallbacks instead of inventing a new rule.
 
-2. lib/compat.h — `#define close closesocket` fires before close() is declared
------------------------------------------------------------------------------
-compat.h maps close() onto closesocket() on Windows, but only #includes
-<io.h> under __USE_WINSOCK__. In the default (winsock2) configuration <io.h>
-is therefore not seen before the macro is defined. Any translation unit that
-later includes <fcntl.h> — libdcerpc/dcerpc.c does, at line 74, right after
-compat.h — pulls in <io.h> with the macro already active, so io.h's
-`int close(int)` is rewritten to `int closesocket(int)` and collides with
-Winsock's `closesocket(SOCKET)`:
-
-    io.h:330:15: error: conflicting types for 'closesocket'
-    compat.h:277:15: note: expanded from macro 'close'
-    winsock.h:279:34: note: previous declaration is here
-
-Fix the ordering rather than the macro: include <io.h> up front so close() is
-declared while it still means close(). The later <fcntl.h> then re-enters
-<io.h> as a no-op via its include guard. Behaviour of libsmb2's own close()
-calls is unchanged — they still map to closesocket(). Skipped on _XBOX, which
-has no <io.h>.
-
-3. lib/compat.c — never includes config.h, so NEED_* is invisible
+2. lib/compat.c — never includes config.h, so NEED_* is invisible
 -----------------------------------------------------------------
 compat.c guards its POSIX shims (random(), srandom(), getlogin_r(), ...)
 behind NEED_RANDOM / NEED_SRANDOM / NEED_GETLOGIN_R, but — unlike every other
@@ -64,7 +43,7 @@ Add the same preamble the rest of lib/ uses. compat.c tests no HAVE_* macros
 at all, so pulling config.h in changes nothing beyond making the NEED_*
 switches visible.
 
-Touches: include/asprintf.h, lib/compat.h, lib/compat.c
+Touches: include/asprintf.h, lib/compat.c
 """
 import sys
 import os
@@ -106,22 +85,6 @@ patch("include/asprintf.h", [
     ),
 ])
 
-patch("lib/compat.h", [
-    (
-        "#ifdef __USE_WINSOCK__\n"
-        "#include <io.h>\n"
-        "#endif\n",
-
-        "/* <io.h> declares close(). Pull it in *before* the\n"
-        " * `#define close closesocket` further down, or a later <fcntl.h>\n"
-        " * (libdcerpc/dcerpc.c includes one) declares `int close(int)` with the\n"
-        " * macro already active and it collides with closesocket(SOCKET). */\n"
-        "#if !defined(_XBOX)\n"
-        "#include <io.h>\n"
-        "#endif\n",
-    ),
-])
-
 patch("lib/compat.c", [
     (
         "*/\n"
@@ -137,5 +100,5 @@ patch("lib/compat.c", [
     ),
 ])
 
-print("Patched: asprintf/vasprintf mingw guards, <io.h> before close macro, "
-      "config.h in compat.c (asprintf.h, compat.h, compat.c)")
+print("Patched: asprintf/vasprintf mingw guards, "
+      "config.h in compat.c (asprintf.h, compat.c)")

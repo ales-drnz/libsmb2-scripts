@@ -20,9 +20,13 @@
 /* #undef HAVE_GSSAPI_GSSAPI_H */
 /* #undef HAVE_DCERPC_FULL */          /* full DCE/RPC stays in libdcerpc */
 #define PACKAGE "libsmb2"
-#define PACKAGE_VERSION "6.1.0"
-#define VERSION "6.1.0"
+/* configure.ac of the pinned commit says 7.0.0 (git describe: 6.2-407). */
+#define PACKAGE_VERSION "7.0.0"
+#define VERSION "7.0.0"
 #if defined(__APPLE__)
+/* AES through CommonCrypto (lib/aes_apple.c) instead of the reference C
+ * implementation; upstream gates it on this check since 2026-08. */
+#define HAVE_COMMONCRYPTO_COMMONCRYPTOR_H 1
 #define HAVE_ARPA_INET_H 1
 #define HAVE_ARC4RANDOM_BUF 1
 #define HAVE_DLFCN_H 1

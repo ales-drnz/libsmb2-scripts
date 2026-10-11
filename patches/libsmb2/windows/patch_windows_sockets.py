@@ -4,21 +4,21 @@
 
 """Win64 socket-handle correctness + Winsock header hygiene.
 
-On Win64 a SOCKET is a 64-bit handle; upstream narrows it to int in two
-places, which truncates real handle values (Winsock handles are opaque and
-routinely exceed INT_MAX under handle-stress):
+On Win64 a SOCKET is a 64-bit handle. connect_async_ai() returns the new
+socket through an `int *fd_out`, which truncates real handle values
+(Winsock handles are opaque and can exceed INT_MAX); it is widened to
+t_socket. The `int maxfd` of the server loop in smb2_serve_port() stays as
+upstream has it: Winsock's select() ignores its first argument, and the
+server's extra_fdset hook takes an `int *`.
 
-  - connect_async_ai() returns the new socket through an `int *fd_out`
-  - the smb2_connect_share() readiness loop tracks `int maxfd`
-
-Both are widened to t_socket. Also:
+Also:
 
   - struct linger: mingw's <winsock2.h> already defines it; upstream's
     !HAVE_LINGER fallback redefinition collides — scope it to !_WIN32.
   - libsmb2.h pulls in <windows.h>: define WIN32_LEAN_AND_MEAN first so
     consumers don't drag the whole Win32 API (and its macro pollution) in.
 
-Touches: lib/socket.c, lib/libsmb2.c, include/smb2/libsmb2.h
+Touches: lib/socket.c, include/smb2/libsmb2.h
 """
 import sys
 import os
@@ -61,18 +61,6 @@ patch("lib/socket.c", [
     ),
 ])
 
-patch("lib/libsmb2.c", [
-    (
-        "        int maxfd;\n",
-        "        t_socket maxfd;\n",
-    ),
-    (
-        "                ready = select(\n"
-        "                            maxfd + 1,\n",
-        "                ready = select(\n"
-        "                            (int)(maxfd + 1),\n",
-    ),
-])
 
 patch("include/smb2/libsmb2.h", [
     (
@@ -84,4 +72,4 @@ patch("include/smb2/libsmb2.h", [
     ),
 ])
 
-print("Patched: t_socket handle widths + Winsock header hygiene (socket.c, libsmb2.c, libsmb2.h)")
+print("Patched: t_socket handle widths + Winsock header hygiene (socket.c, libsmb2.h)")
