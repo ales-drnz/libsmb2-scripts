@@ -1,0 +1,144 @@
+name: Build
+
+# Builds every libsmb2 binary dart_smb2 ships, on GitHub's runners (macOS
+# ones included, so no Mac is needed), collects them with manifest.json and
+# SHA256SUMS into one artifact, and checks them with verify_binaries.sh on
+# both runner architectures. Publishing the libsmb2-<release> GitHub release
+# on dart_smb2 stays a manual step.
+on:
+  push:
+    branches: ['release/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target linux -t libsmb2-build-linux docker/
+      # ubuntu:20.04 image: glibc 2.31 floor; aarch64 is cross-compiled.
+      - name: Build
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" \
+            -v "$PWD:/scripts" -w /scripts \
+            libsmb2-build-linux bash scripts/build_libsmb2_linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: release_builds/libsmb2_linux-*.so
+          if-no-files-found: error
+
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 28.2.13676358
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Build
+        run: bash scripts/build_libsmb2_android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: release_builds/libsmb2_android-*.so
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target windows -t libsmb2-build-windows docker/
+      - name: Build
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" \
+            -v "$PWD:/scripts" -w /scripts \
+            libsmb2-build-windows bash scripts/build_libsmb2_windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release_builds/libsmb2_windows-*.dll
+          if-no-files-found: error
+
+  apple:
+    name: ${{ matrix.name }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            script: scripts/build_libsmb2_macos.sh
+            output: release_builds/libsmb2_macos.xcframework.zip
+          - name: iOS
+            script: scripts/build_libsmb2_ios.sh
+            output: release_builds/libsmb2_ios.xcframework.zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: bash ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.output }}
+          if-no-files-found: error
+
+  release:
+    name: Collect release
+    needs: [linux, android, windows, apple]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Assemble release_builds
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p release_builds
+          find artifacts -type f -name 'libsmb2_*' -exec cp {} release_builds/ \;
+          scripts/write_manifest.sh
+          ls -la release_builds
+          cat release_builds/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libsmb2-release
+          path: release_builds/
+          if-no-files-found: error
+
+  # Both runner architectures, so each Linux library is also dlopened on
+  # the glibc 2.31 floor of its own arch.
+  verify:
+    name: Verify (${{ matrix.os }})
+    needs: release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: libsmb2-release
+          path: release_builds
+      - run: docker build --target verify -t libsmb2-build-verify docker/
+      - name: Verify
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" \
+            -v "$PWD:/scripts" -w /scripts \
+            libsmb2-build-verify bash scripts/verify_binaries.sh
