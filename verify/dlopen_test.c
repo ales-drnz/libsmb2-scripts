@@ -4,71 +4,22 @@
  * Use of this source code is governed by BSD 3-Clause license that can be
  * found in the LICENSE file.
  *
- * dlopen smoke test for the built libsmb2 shared library.
+ * dlopen_test <library> <symbols.txt>
  *
- * Loads the .so/.dylib given as argv[1] and resolves the symbols the
- * dart_smb2 FFI layer binds at runtime — both the smb2w_* wrapper API and
- * the patched-in libsmb2 additions. Exits non-zero (naming the first
- * missing symbol) on failure.
- *
- *   cc verify/dlopen_test.c -o dlopen_test -ldl
- *   ./dlopen_test release_builds/libsmb2_linux-x86_64.so
+ * Loads the library the way dart_smb2 does (RTLD_NOW | RTLD_LOCAL), resolves
+ * every symbol listed in symbols.txt (one per line; blank lines and lines
+ * starting with '#' are skipped), then creates and destroys a libsmb2
+ * context, which runs the patched active_contexts lock on this platform's
+ * libc. Exits non-zero on any failure.
  */
-#include <stdio.h>
 #include <dlfcn.h>
-
-static const char *symbols[] = {
-    /* wrapper lifecycle + errors */
-    "smb2w_connect",
-    "smb2w_disconnect",
-    "smb2w_echo",
-    "smb2w_error",
-    "smb2w_get_last_error",
-    "smb2w_get_nterror",
-    "smb2w_get_errno",
-    "smb2w_free",
-    /* wrapper file ops */
-    "smb2w_open_file",
-    "smb2w_open_file_write",
-    "smb2w_open_file_with_size",
-    "smb2w_close_file",
-    "smb2w_read_file",
-    "smb2w_write_file",
-    "smb2w_pread",
-    "smb2w_pread_handle",
-    "smb2w_pwrite",
-    "smb2w_pwrite_handle",
-    "smb2w_filesize",
-    "smb2w_fsync",
-    "smb2w_ftruncate",
-    "smb2w_truncate",
-    "smb2w_unlink",
-    "smb2w_rename",
-    "smb2w_stat",
-    "smb2w_statvfs",
-    "smb2w_readlink",
-    /* wrapper directory ops */
-    "smb2w_listdir",
-    "smb2w_dirlist_free",
-    "smb2w_mkdir",
-    "smb2w_rmdir",
-    /* wrapper share enumeration */
-    "smb2w_list_shares",
-    "smb2w_sharelist_free",
-    /* patched-in libsmb2 API (bound directly by dart_smb2) */
-    "smb2_utimes",
-    "smb2_utimes_async",
-    /* upstream API the wrapper depends on */
-    "smb2_share_enum_sync",
-    "smb2_init_context",
-    "smb2_destroy_context",
-    NULL,
-};
+#include <stdio.h>
+#include <string.h>
 
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <libsmb2.so>\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s <library> <symbols.txt>\n", argv[0]);
         return 2;
     }
 
@@ -78,20 +29,45 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int missing = 0;
-    for (const char **s = symbols; *s; s++) {
-        if (!dlsym(h, *s)) {
-            fprintf(stderr, "FAIL missing symbol: %s\n", *s);
+    FILE *list = fopen(argv[2], "r");
+    if (!list) {
+        perror(argv[2]);
+        return 2;
+    }
+
+    char line[256];
+    int checked = 0, missing = 0;
+    while (fgets(line, sizeof(line), list)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[0] == '\0' || line[0] == '#') {
+            continue;
+        }
+        checked++;
+        if (!dlsym(h, line)) {
+            fprintf(stderr, "FAIL missing symbol: %s\n", line);
             missing++;
+        }
+    }
+    fclose(list);
+
+    if (!missing) {
+        void *(*init)(void) = (void *(*)(void))dlsym(h, "smb2_init_context");
+        void (*destroy)(void *) = (void (*)(void *))dlsym(h, "smb2_destroy_context");
+        void *ctx = init();
+        if (!ctx) {
+            fprintf(stderr, "FAIL smb2_init_context returned NULL\n");
+            missing++;
+        } else {
+            destroy(ctx);
         }
     }
     dlclose(h);
 
     if (missing) {
-        fprintf(stderr, "FAIL %d symbol(s) missing in %s\n", missing, argv[1]);
+        fprintf(stderr, "FAIL %s: %d problem(s)\n", argv[1], missing);
         return 1;
     }
-    printf("OK %s: dlopen + all %d symbols resolved\n",
-           argv[1], (int)(sizeof(symbols) / sizeof(symbols[0]) - 1));
+    printf("OK   %s: loaded, %d symbols resolved, context created and destroyed\n",
+           argv[1], checked);
     return 0;
 }

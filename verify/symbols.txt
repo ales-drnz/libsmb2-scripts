@@ -1,0 +1,56 @@
+# The libsmb2 functions dart_smb2 binds (lib/src/ffi/libsmb2_bindings.dart).
+# Every release binary must export each of them; scripts/verify_binaries.sh
+# checks it, and dart_smb2's tool/bindings_drift.dart checks that its
+# bindings use nothing outside this list.
+
+# Context lifecycle and settings
+smb2_init_context
+smb2_destroy_context
+smb2_set_user
+smb2_set_password
+smb2_set_domain
+smb2_set_seal
+smb2_set_sign
+smb2_set_version
+smb2_set_timeout
+
+# Connection
+smb2_connect_share
+smb2_disconnect_share
+smb2_echo
+smb2_get_max_read_size
+smb2_get_max_write_size
+
+# Errors
+smb2_get_error
+smb2_get_nterror
+nterror_to_errno
+
+# Directories
+smb2_opendir
+smb2_readdir
+smb2_closedir
+
+# Files and metadata
+smb2_open
+smb2_close
+smb2_pread
+smb2_pwrite
+smb2_fsync
+smb2_fstat
+smb2_ftruncate
+smb2_stat
+smb2_statvfs
+smb2_readlink
+smb2_truncate
+smb2_rename
+smb2_unlink
+smb2_mkdir
+smb2_rmdir
+
+# Patched in by patches/libsmb2/shared/patch_utimes.py
+smb2_utimes
+
+# Share enumeration
+smb2_share_enum_sync
+smb2_free_data
