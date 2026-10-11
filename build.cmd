@@ -10,5 +10,4 @@ where go >nul 2>nul || (
   exit /b 1
 )
 cd /d "%~dp0tui"
-go mod tidy >nul 2>nul
 go run . %*

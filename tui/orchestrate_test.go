@@ -7,7 +7,7 @@ package main
 import "testing"
 
 func testCtx() *buildCtx {
-	return &buildCtx{scriptsRoot: "/tmp/s", repoRoot: "/tmp/r"}
+	return &buildCtx{scriptsRoot: "/tmp/s"}
 }
 
 func TestExpandUnknownTarget(t *testing.T) {

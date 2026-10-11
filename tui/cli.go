@@ -56,23 +56,16 @@ USAGE
 
 EXAMPLES
   ./build                          # open the dashboard
-  ./build linux windows            # desktop cross builds (Docker)
-  ./build macos verify             # build macOS, then verify
-  ./build all                      # everything + checksums
-  ./build android lib-local        # build, install, and use the local libs
-  ./build lib-remote               # back to downloading from GitHub Releases
-
-LIBS SOURCE (dart_smb2)
-  lib-local    install built libs + never download (test a patched engine)
-  lib-remote   download from GitHub Releases when a local lib is absent/stale
-  lib-clean    remove the bundled libs from every platform slot
+  ./build linux windows            # desktop builds (Docker)
+  ./build macos verify             # build macOS, then verify everything built
+  ./build all manifest             # everything this host can build + manifest
 
 KNOBS (env, forwarded into Docker builds)
   JOBS=N  KEEP_BUILD=1  FORCE_DOWNLOAD=1
 
-The dart_smb2 package is found as a sibling checkout, or via DART_SMB2_ROOT.
-Apple targets require macOS; Linux / Windows build in Docker; Android needs
-the NDK on the host.
+Outputs land in release_builds/. Apple targets require macOS; Linux, Windows
+and Verify run in Docker; Android needs the pinned NDK on the host. CI
+(.github/workflows/build.yml) builds all nine on GitHub's runners.
 `)
 }
 

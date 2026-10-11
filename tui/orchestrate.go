@@ -5,6 +5,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,25 +15,45 @@ import (
 )
 
 // buildCtx holds the resolved paths the build commands need. It replaces the
-// Makefile's REPO_ROOT / DOCKER_RUN machinery.
+// Makefile's DOCKER_RUN machinery. Building needs only this repo: the
+// binaries, manifest.json and SHA256SUMS land in release_builds/.
 type buildCtx struct {
 	scriptsRoot string // the libsmb2-scripts checkout (holds scripts/, docker/, tui/)
-	repoRoot    string // the dart_smb2 package (build outputs land here)
 	settings    userSettings
 }
-
-const dockerImage = "libsmb2-builder"
 
 func newBuildCtx() (*buildCtx, error) {
 	sr, err := findScriptsRoot()
 	if err != nil {
 		return nil, err
 	}
-	rr, err := resolveRepoRoot(sr)
-	if err != nil {
-		return nil, err
+	return &buildCtx{scriptsRoot: sr, settings: loadSettings()}, nil
+}
+
+// imageRepo is the image name of one docker/Dockerfile stage.
+func imageRepo(stage string) string { return "libsmb2-build-" + stage }
+
+// imageRef tags a stage image with a hash of docker/Dockerfile, so editing
+// the Dockerfile makes the orchestrator build a fresh image instead of
+// reusing one with an older toolchain.
+func (c *buildCtx) imageRef(stage string) string {
+	tag := "latest"
+	if data, err := os.ReadFile(filepath.Join(c.scriptsRoot, "docker", "Dockerfile")); err == nil {
+		sum := sha256.Sum256(data)
+		tag = hex.EncodeToString(sum[:6])
 	}
-	return &buildCtx{scriptsRoot: sr, repoRoot: rr, settings: loadSettings()}, nil
+	return imageRepo(stage) + ":" + tag
+}
+
+// dockerPlatform pins the linux stage to amd64: its gcc is the x86_64
+// compiler and aarch64 is the cross one, so on an arm64 host it runs under
+// emulation. The windows (llvm-mingw for either host arch) and verify
+// stages run natively.
+func dockerPlatform(stage string) []string {
+	if stage == "linux" {
+		return []string{"--platform=linux/amd64"}
+	}
+	return nil
 }
 
 // findScriptsRoot walks up from the executable and the CWD looking for the
@@ -49,22 +71,6 @@ func findScriptsRoot() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("cannot locate the libsmb2-scripts root (scripts/shared/_versions.sh not found upwards of %s)", mustGetwd())
-}
-
-// resolveRepoRoot finds the dart_smb2 package: $DART_SMB2_ROOT, or the
-// sibling checkout next to libsmb2-scripts.
-func resolveRepoRoot(scriptsRoot string) (string, error) {
-	if env := os.Getenv("DART_SMB2_ROOT"); env != "" {
-		if !fileExists(filepath.Join(env, "pubspec.yaml")) {
-			return "", fmt.Errorf("DART_SMB2_ROOT does not contain pubspec.yaml: %s", env)
-		}
-		return env, nil
-	}
-	cand := filepath.Join(filepath.Dir(scriptsRoot), "dart_smb2")
-	if fileExists(filepath.Join(cand, "pubspec.yaml")) {
-		return cand, nil
-	}
-	return "", fmt.Errorf("cannot locate dart_smb2 — clone it next to libsmb2-scripts or set DART_SMB2_ROOT")
 }
 
 func mustGetwd() string {
@@ -100,35 +106,29 @@ func (c *buildCtx) knobEnv() []string {
 func (c *buildCtx) command(t Target) *exec.Cmd {
 	switch t.kind {
 	case kImage:
-		cmd := exec.Command("docker", "build", "--platform=linux/amd64",
-			"-t", dockerImage, "./docker/")
+		args := append([]string{"build"}, dockerPlatform(t.image)...)
+		args = append(args, "--target", t.image, "-t", c.imageRef(t.image), "./docker/")
+		cmd := exec.Command("docker", args...)
 		cmd.Dir = c.scriptsRoot
 		return cmd
 
 	case kDocker:
-		args := []string{"run", "--rm", "--platform=linux/amd64",
-			"-e", "DART_SMB2_ROOT=/repo",
+		args := append([]string{"run", "--rm"}, dockerPlatform(t.image)...)
+		// Run as the calling user, so release_builds/ stays theirs.
+		if hostOS != "windows" {
+			args = append(args, "-u", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
 		}
 		for _, kv := range append(c.knobEnv(), t.env...) {
 			args = append(args, "-e", kv)
 		}
 		args = append(args,
-			"-v", c.repoRoot+":/repo",
 			"-v", c.scriptsRoot+":/scripts",
 			"-w", "/scripts",
-			dockerImage,
+			c.imageRef(t.image),
 			"bash", "./"+t.script,
 		)
 		cmd := exec.Command("docker", args...)
 		cmd.Dir = c.scriptsRoot
-		return cmd
-
-	case kSelf:
-		// Re-exec the orchestrator with a hidden subcommand (Go-side steps like
-		// the Libs switch) — no bash or Docker needed.
-		cmd := exec.Command(selfExe(), t.selfArg)
-		cmd.Dir = c.scriptsRoot
-		cmd.Env = os.Environ()
 		return cmd
 
 	default: // kNative
@@ -139,24 +139,14 @@ func (c *buildCtx) command(t Target) *exec.Cmd {
 	}
 }
 
-// selfExe returns the path to the running orchestrator binary, so kSelf
-// targets can re-exec it with a hidden subcommand.
-func selfExe() string {
-	if exe, err := os.Executable(); err == nil {
-		return exe
-	}
-	return os.Args[0]
-}
-
-// dockerImageMissing reports whether the build-env image needs building.
-func dockerImageMissing() bool {
-	err := exec.Command("docker", "image", "inspect", dockerImage).Run()
-	return err != nil
+// imageMissing reports whether a stage image needs building.
+func (c *buildCtx) imageMissing(stage string) bool {
+	return exec.Command("docker", "image", "inspect", c.imageRef(stage)).Run() != nil
 }
 
 // expand resolves keys → concrete targets: aggregates flatten (depth-first,
-// deduped), and the docker-image step is prepended once when any requested
-// target needs the container and the image is missing.
+// deduped), and the docker-image-<stage> step of every missing image a
+// requested target runs in is prepended once.
 func (c *buildCtx) expand(keys []string) ([]Target, error) {
 	seen := map[string]bool{}
 	var out []Target
@@ -189,16 +179,19 @@ func (c *buildCtx) expand(keys []string) ([]Target, error) {
 		}
 	}
 
-	needImage := false
+	var images []Target
 	for _, t := range out {
-		if t.needsDocker() {
-			needImage = true
-			break
+		if !t.needsDocker() {
+			continue
 		}
+		key := "docker-image-" + t.image
+		if seen[key] || !c.imageMissing(t.image) {
+			continue
+		}
+		seen[key] = true
+		img, _ := targetByKey(key)
+		images = append(images, img)
 	}
-	if needImage && !seen["docker-image"] && dockerImageMissing() {
-		img, _ := targetByKey("docker-image")
-		out = append([]Target{img}, out...)
-	}
+	out = append(images, out...)
 	return out, nil
 }

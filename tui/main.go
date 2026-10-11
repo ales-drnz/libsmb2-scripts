@@ -40,13 +40,6 @@ func main() {
 		case "patches":
 			printPatches(ctx)
 			return
-		case "_liblocal", "_libremote", "_libclean":
-			key := "lib-" + strings.TrimPrefix(args[0], "_lib")
-			if err := runLibAction(ctx, key, func(l string) { fmt.Println(l) }); err != nil {
-				fmt.Fprintln(os.Stderr, "error:", err)
-				os.Exit(1)
-			}
-			return
 		default:
 			os.Exit(runCLI(args, ctx))
 		}
@@ -570,14 +563,14 @@ func (m *model) keySelect(key string) (tea.Model, tea.Cmd) {
 		case "up", "k", "esc":
 			m.onBuildTabs = true
 		case "enter", " ":
-			if m.docker.Exists {
-				_ = deleteDockerImage()
-				m.docker = probeDocker()
+			if m.docker.allBuilt() {
+				_ = deleteDockerImages(m.ctx)
+				m.docker = probeDocker(m.ctx)
 			} else {
-				return m, m.startKeys([]string{"docker-image"})
+				return m, m.startKeys(m.docker.missingKeys())
 			}
 		case "r":
-			m.docker = probeDocker()
+			m.docker = probeDocker(m.ctx)
 		case "q":
 			return m, tea.Quit
 		}
@@ -819,7 +812,7 @@ func (m *model) abortAll() {
 
 func (m *model) probeDockerOnce() {
 	if !m.dockerProbed {
-		m.docker = probeDocker()
+		m.docker = probeDocker(m.ctx)
 		m.dockerProbed = true
 	}
 }
@@ -1120,9 +1113,9 @@ func (m *model) viewSelect() string {
 			[2]string{"q", "quit"},
 		)
 	case m.buildTab == 2:
-		act := "build image"
-		if m.docker.Exists {
-			act = "delete image"
+		act := "build images"
+		if m.docker.allBuilt() {
+			act = "delete images"
 		}
 		help = helpBar(
 			[2]string{"⏎", act},

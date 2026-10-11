@@ -10,10 +10,9 @@ type tkind int
 
 const (
 	kNative    tkind = iota // bash script on the host
-	kDocker                 // bash script inside the libsmb2-builder container
-	kImage                  // docker build of the build-env image
+	kDocker                 // bash script inside a docker/Dockerfile stage image
+	kImage                  // docker build of one stage image
 	kAggregate              // expands to other targets
-	kSelf                   // the orchestrator itself, via a hidden subcommand
 )
 
 // Target is one buildable / publishable step. It carries everything needed to
@@ -30,7 +29,7 @@ type Target struct {
 	script  string
 	env     []string // extra "K=V" pairs (ARCHS / ABIS selectors)
 	members []string // for kAggregate
-	selfArg string   // for kSelf: the hidden subcommand (e.g. "_liblocal")
+	image   string   // for kDocker / kImage: the docker/Dockerfile stage
 }
 
 // hostOS is the OS the orchestrator runs on. A package var so tests can
@@ -101,43 +100,35 @@ func allTargets() []Target {
 		{Key: "android", Label: "all", Group: "Android", InMenu: true, kind: kAggregate,
 			members: []string{"android-arm64-v8a", "android-armeabi-v7a", "android-x86_64"}},
 
-		// ── Linux (Docker — any host) ──
-		{Key: "linux-x86_64", Label: "x86_64", Group: "Linux", InMenu: true, kind: kDocker, script: sLinux, env: []string{"ARCHS=x86_64"}},
-		{Key: "linux-aarch64", Label: "aarch64", Group: "Linux", InMenu: true, kind: kDocker, script: sLinux, env: []string{"ARCHS=aarch64"}},
+		// ── Linux (Docker — any host; the ubuntu:20.04 stage keeps glibc 2.31) ──
+		{Key: "linux-x86_64", Label: "x86_64", Group: "Linux", InMenu: true, kind: kDocker, image: "linux", script: sLinux, env: []string{"ARCHS=x86_64"}},
+		{Key: "linux-aarch64", Label: "aarch64", Group: "Linux", InMenu: true, kind: kDocker, image: "linux", script: sLinux, env: []string{"ARCHS=aarch64"}},
 		{Key: "linux", Label: "all", Group: "Linux", InMenu: true, kind: kAggregate,
 			members: []string{"linux-x86_64", "linux-aarch64"}},
 
 		// ── Windows (Docker — any host) ──
-		{Key: "windows-x86_64", Label: "x86_64", Group: "Windows", InMenu: true, kind: kDocker, script: sWin, env: []string{"ARCHS=x86_64"}},
-		{Key: "windows-arm64", Label: "arm64", Group: "Windows", InMenu: true, kind: kDocker, script: sWin, env: []string{"ARCHS=arm64"}},
+		{Key: "windows-x86_64", Label: "x86_64", Group: "Windows", InMenu: true, kind: kDocker, image: "windows", script: sWin, env: []string{"ARCHS=x86_64"}},
+		{Key: "windows-arm64", Label: "arm64", Group: "Windows", InMenu: true, kind: kDocker, image: "windows", script: sWin, env: []string{"ARCHS=arm64"}},
 		{Key: "windows", Label: "all", Group: "Windows", InMenu: true, kind: kAggregate,
 			members: []string{"windows-x86_64", "windows-arm64"}},
 
 		// ── Publish / validate ──
-		{Key: "checksums", Label: "Checksums", Group: "Tools", InMenu: true, kind: kNative, script: "scripts/generate_checksums.sh",
-			Desc: "install built libs into dart_smb2 + refresh its SHA-256s"},
-		{Key: "verify", Label: "Verify", Group: "Tools", InMenu: true, kind: kNative, script: "scripts/verify_binaries.sh",
-			Desc: "dlopen + FFI-symbol audit of the host-loadable binaries"},
-		{Key: "bump", Label: "Bump", Group: "Tools", InMenu: false, kind: kNative, script: "scripts/bump_version.sh",
-			Desc: "propagate LIB_VERSION / RELEASE_VERSION into dart_smb2"},
+		{Key: "manifest", Label: "Manifest", Group: "Tools", InMenu: true, kind: kNative, script: "scripts/write_manifest.sh",
+			Desc: "write manifest.json + SHA256SUMS for the built libraries"},
+		{Key: "verify", Label: "Verify", Group: "Tools", InMenu: true, kind: kDocker, image: "verify", script: "scripts/verify_binaries.sh",
+			Desc: "exports, glibc floor, alignment, imports, minimum OS; dlopen"},
 		{Key: "sources", Label: "Sources", Group: "Tools", InMenu: true, kind: kNative, script: "scripts/export_sources.sh",
 			Desc: "export the patched libsmb2 tree for dart_smb2's ffigen"},
 
-		// ── Libs source switch for dart_smb2 (see libmode.go) ──
-		{Key: "lib-local", Label: "Libs local", Group: "Tools", InMenu: true, kind: kSelf, selfArg: "_liblocal",
-			Desc: "install built libs, then use them only — never download from GitHub"},
-		{Key: "lib-remote", Label: "Libs remote", Group: "Tools", InMenu: true, kind: kSelf, selfArg: "_libremote",
-			Desc: "download from GitHub Releases when a local lib is missing or stale"},
-		{Key: "lib-clean", Label: "Libs clean", Group: "Tools", InMenu: true, kind: kSelf, selfArg: "_libclean",
-			Desc: "remove the bundled libs from every platform slot"},
-
 		// ── Non-menu (CLI / internal) ──
-		{Key: "docker-image", Label: "Build the build-env image", Group: "Docker", InMenu: false, kind: kImage},
+		{Key: "docker-image-linux", Label: "Build the Linux build image", Group: "Docker", InMenu: false, kind: kImage, image: "linux"},
+		{Key: "docker-image-windows", Label: "Build the Windows build image", Group: "Docker", InMenu: false, kind: kImage, image: "windows"},
+		{Key: "docker-image-verify", Label: "Build the Verify image", Group: "Docker", InMenu: false, kind: kImage, image: "verify"},
 
 		// ── Aggregates (CLI convenience) ──
 		{Key: "desktop-all", Label: "All desktop targets", Group: "Aggregate", InMenu: false, kind: kAggregate, members: []string{"linux", "windows"}},
-		{Key: "all", Label: "Everything + checksums", Group: "Aggregate", InMenu: false, kind: kAggregate,
-			members: []string{"macos", "ios", "android", "desktop-all", "checksums"}},
+		{Key: "all", Label: "Everything + manifest", Group: "Aggregate", InMenu: false, kind: kAggregate,
+			members: []string{"macos", "ios", "android", "desktop-all", "manifest"}},
 	}
 }
 
