@@ -1,3 +1,33 @@
+## [0.2.0] - 12-10-2026
+
+### Breaking
+- `./build checksums`, `./build bump` and the `lib-local` / `lib-remote` / `lib-clean` switch are gone: a build ends in `release_builds/` with `manifest.json`, and dart_smb2 takes the hashes into its build hook with `tool/update_libsmb2.sh`. Building needs no dart_smb2 checkout.
+- `src/smb2_wrapper.c`, unused since dart_smb2 0.1.0, is gone; each binary exports libsmb2's public API only.
+
+### Added
+- `.github/workflows/build.yml`: every push to a `release/` branch builds all nine binaries on GitHub's runners, Apple included, and verifies them on x86_64 and arm64.
+- `manifest.json` and `SHA256SUMS` with every build (`./build manifest`).
+- `patch_active_contexts_lock.py`: a lock around libsmb2's global context list, which dart_smb2's worker isolates change from several threads.
+- `patch_rmdir_disposition.py`: `rmdir` fails with `STATUS_DIRECTORY_NOT_EMPTY` instead of returning success and keeping the directory.
+- `licenses/libsmb2/`: libsmb2's `COPYING` and LGPL-2.1 text.
+
+### Changed
+- libsmb2 is upstream master of 11-10-2026 (e94eee9). Binaries: `libsmb2-r9`.
+- `verify` checks all nine binaries: exported symbols (`verify/symbols.txt`), machine, glibc floor, Android alignment and dependencies, Windows imports, Apple slices and minimum OS. It runs in its own Docker image.
+- Docker has one stage per job, base images pinned by digest and llvm-mingw by SHA-256; images are tagged with a hash of the Dockerfile and rebuilt when it changes, and containers run as the calling user.
+- Linux builds on Ubuntu 20.04: the libraries need glibc 2.31, not 2.38.
+- Windows builds both architectures with llvm-mingw and without a PE timestamp; with `LC_ALL=C` link order, Linux, Android and Windows builds are byte for byte reproducible.
+- Android requires the pinned NDK unless `ALLOW_ANY_NDK=1`, and links libc only. Apple targets iOS 13.0 and macOS 10.15 and uses CommonCrypto for AES.
+- `JOBS` applies to every platform, and a failed compile stops the build.
+- Each patch script states that its code is added to libsmb2 under the LGPL-2.1.
+
+### Fixed
+- `patch_windows_sockets.py` no longer widens `maxfd` in the server loop, which broke the build against upstream's new `extra_fdset` hook.
+
+### Removed
+- `patch_timeout_caller_frees.py` and `patch_sync_open_cb_data_leak.py`: upstream carries both fixes (b0b1e42, 7905719).
+- `patch_windows_dcerpc_interface.py` and the `<io.h>` reordering of `patch_windows_headers.py`: they only mattered for the DCE/RPC code upstream moved to libdcerpc.
+
 ## [0.1.3] - 19-09-2026
 
 ### Fixed
