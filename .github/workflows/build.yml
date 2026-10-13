@@ -6,9 +6,12 @@ name: Build
 # with verify_binaries.sh on both runner architectures. Publishing the
 # libsmb2-<release> GitHub release on dart_smb2 stays a manual step.
 #
-# Actions are pinned by commit SHA (the tag in the comment), and the macOS
-# runner by image version (macos-26, the one macos-latest resolved to for
-# r9), so a later run uses the same tools.
+# Actions are pinned by commit SHA (the tag in the comment). The macOS jobs
+# run on the macos-26 label, which GitHub updates in place (run 38380220282
+# got image macos-26-arm64 20260907.0351.1), so the OS and command line tools
+# can change between runs; the Xcode they build with is pinned through
+# DEVELOPER_DIR to 26.6 (17F113), that image's default, and the job fails if
+# a later image no longer has it.
 on:
   push:
     branches: ['release/**']
@@ -84,6 +87,8 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: macos-26
     timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +101,11 @@ jobs:
             output: release_builds/libsmb2_ios.xcframework.zip
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the pinned Xcode
+        run: |
+          test -d "$DEVELOPER_DIR" || { echo "::error::$DEVELOPER_DIR not on this image"; exit 1; }
+          xcodebuild -version
+          xcodebuild -version | grep -qx 'Build version 17F113'
       - name: Build
         run: bash ${{ matrix.script }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
