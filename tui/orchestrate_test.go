@@ -4,10 +4,26 @@
 
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
 
 func testCtx() *buildCtx {
 	return &buildCtx{scriptsRoot: "/tmp/s"}
+}
+
+// onHost simulates a host OS and whether the Android NDK is installed, for
+// the rest of the test.
+func onHost(t *testing.T, goos string, ndk bool) {
+	t.Helper()
+	prevOS, prevNDK := hostOS, ndkFound
+	hostOS = goos
+	ndkFound = func() bool { return ndk }
+	t.Cleanup(func() { hostOS, ndkFound = prevOS, prevNDK })
 }
 
 func TestExpandUnknownTarget(t *testing.T) {
@@ -19,9 +35,7 @@ func TestExpandUnknownTarget(t *testing.T) {
 func TestExpandFlattensAggregates(t *testing.T) {
 	// android is a kNative aggregate → expands to its three ABIs without
 	// touching docker.
-	prevOS := hostOS
-	hostOS = "linux"
-	defer func() { hostOS = prevOS }()
+	onHost(t, "linux", true)
 
 	got, _, err := testCtx().expand([]string{"android"})
 	if err != nil {
@@ -39,9 +53,7 @@ func TestExpandFlattensAggregates(t *testing.T) {
 }
 
 func TestExpandDeduplicates(t *testing.T) {
-	prevOS := hostOS
-	hostOS = "linux"
-	defer func() { hostOS = prevOS }()
+	onHost(t, "linux", true)
 
 	got, _, err := testCtx().expand([]string{"android-x86_64", "android-x86_64"})
 	if err != nil {
@@ -53,9 +65,7 @@ func TestExpandDeduplicates(t *testing.T) {
 }
 
 func TestExpandRejectsUnavailable(t *testing.T) {
-	prevOS := hostOS
-	hostOS = "linux"
-	defer func() { hostOS = prevOS }()
+	onHost(t, "linux", true)
 
 	if _, _, err := testCtx().expand([]string{"macos"}); err == nil {
 		t.Fatal("expected an error: macos target on a linux host")
@@ -75,9 +85,7 @@ func TestEveryAggregateMemberExists(t *testing.T) {
 func TestExpandSkipsUnavailableAggregateMembers(t *testing.T) {
 	// `./build all` on Linux: macOS and iOS are left out with a reason,
 	// everything else (Android, Linux, Windows, the manifest) still runs.
-	prevOS := hostOS
-	hostOS = "linux"
-	defer func() { hostOS = prevOS }()
+	onHost(t, "linux", true)
 
 	got, skipped, err := testCtx().expand([]string{"android", "all"})
 	if err != nil {
@@ -112,5 +120,106 @@ func TestExpandSkipsUnavailableAggregateMembers(t *testing.T) {
 	// aggregate skipped it.
 	if _, _, err := testCtx().expand([]string{"all", "macos"}); err == nil {
 		t.Fatal("expected an error: macos named on a linux host")
+	}
+}
+
+func TestExpandAllWithoutTheNDKSkipsAndroid(t *testing.T) {
+	// The NDK is missing: all goes on with Linux and Windows instead of
+	// stopping at the first Android target.
+	onHost(t, "linux", false)
+	got, skipped, err := testCtx().expand([]string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reason := "needs Android NDK " + ndkVersion
+	for _, k := range []string{"android-arm64-v8a", "android-armeabi-v7a", "android-x86_64"} {
+		found := false
+		for _, s := range skipped {
+			if s == k+": "+reason {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("skipped %q, want %q", skipped, k+": "+reason)
+		}
+	}
+	keys := map[string]bool{}
+	for _, tg := range got {
+		keys[tg.Key] = true
+	}
+	for _, k := range []string{"linux-x86_64", "linux-aarch64", "windows-x86_64", "windows-arm64"} {
+		if !keys[k] {
+			t.Errorf("%s missing from the expansion of all", k)
+		}
+	}
+	for k := range keys {
+		if strings.HasPrefix(k, "android-") {
+			t.Errorf("%s kept without the NDK", k)
+		}
+	}
+
+	// Named explicitly, an Android target still fails.
+	if _, _, err := testCtx().expand([]string{"android-x86_64"}); err == nil || !strings.Contains(err.Error(), reason) {
+		t.Errorf("android-x86_64 without the NDK: err = %v, want %q", err, reason)
+	}
+}
+
+func TestNDKVersionMatchesTheAndroidScript(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "scripts", "build_libsmb2_android.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`NDK_VERSION="\$\{NDK_VERSION:-([^}]+)\}"`).FindSubmatch(data)
+	if m == nil {
+		t.Fatal("NDK_VERSION default not found in build_libsmb2_android.sh")
+	}
+	if string(m[1]) != ndkVersion {
+		t.Errorf("ndkVersion = %q, build_libsmb2_android.sh pins %q", ndkVersion, m[1])
+	}
+}
+
+func TestFindAndroidNDK(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, v := range []string{"NDK_HOME", "ANDROID_NDK_HOME", "ANDROID_NDK", "NDK_VERSION", "ALLOW_ANY_NDK"} {
+		t.Setenv(v, "")
+	}
+	if findAndroidNDK() {
+		t.Fatal("found an NDK in an empty home")
+	}
+
+	ndk := filepath.Join(home, "Android", "Sdk", "ndk", ndkVersion)
+	if err := os.MkdirAll(ndk, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(rev string) {
+		if err := os.WriteFile(filepath.Join(ndk, "source.properties"),
+			[]byte("Pkg.Desc = Android NDK\nPkg.Revision = "+rev+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(ndkVersion)
+	if !findAndroidNDK() {
+		t.Error("the pinned NDK under ~/Android/Sdk/ndk was not found")
+	}
+
+	other := filepath.Join(home, "other-ndk")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "source.properties"), []byte("Pkg.Revision = 27.0.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NDK_HOME", other)
+	if findAndroidNDK() {
+		t.Error("NDK_HOME with another version was accepted")
+	}
+	t.Setenv("ALLOW_ANY_NDK", "1")
+	if !findAndroidNDK() {
+		t.Error("ALLOW_ANY_NDK=1 did not accept NDK_HOME")
+	}
+	t.Setenv("NDK_HOME", filepath.Join(home, "missing"))
+	if findAndroidNDK() {
+		t.Error("a missing NDK_HOME was accepted")
 	}
 }

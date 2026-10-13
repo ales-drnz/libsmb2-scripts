@@ -4,7 +4,12 @@
 
 package main
 
-import "runtime"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+)
 
 type tkind int
 
@@ -23,6 +28,7 @@ type Target struct {
 	Group     string
 	Desc      string // one-line "what it does"
 	AppleOnly bool   // needs macOS + Xcode
+	NeedsNDK  bool   // needs the pinned Android NDK on the host
 	InMenu    bool   // shown in the interactive selector
 
 	kind    tkind
@@ -36,17 +42,72 @@ type Target struct {
 // simulate other hosts.
 var hostOS = runtime.GOOS
 
+// ndkVersion is the Android NDK build_libsmb2_android.sh is pinned to (its
+// NDK_VERSION default; a test keeps the two equal).
+const ndkVersion = "28.2.13676358"
+
+// ndkFound reports whether build_libsmb2_android.sh will find a usable NDK.
+// A package var so tests can simulate either case.
+var ndkFound = findAndroidNDK
+
+// findAndroidNDK repeats build_libsmb2_android.sh's lookup: NDK_HOME, then
+// ANDROID_NDK_HOME, then ANDROID_NDK, else the usual SDK locations of
+// NDK_VERSION (default ndkVersion); the NDK's source.properties must name
+// that version unless ALLOW_ANY_NDK=1.
+func findAndroidNDK() bool {
+	version := os.Getenv("NDK_VERSION")
+	if version == "" {
+		version = ndkVersion
+	}
+	ndk := ""
+	for _, v := range []string{"NDK_HOME", "ANDROID_NDK_HOME", "ANDROID_NDK"} {
+		if ndk = os.Getenv(v); ndk != "" {
+			break
+		}
+	}
+	if ndk == "" {
+		home, _ := os.UserHomeDir()
+		for _, d := range []string{
+			filepath.Join(home, "Library", "Android", "sdk", "ndk", version),
+			filepath.Join(home, "Android", "Sdk", "ndk", version),
+			"/opt/android-ndk-" + version,
+			"/usr/local/lib/android/sdk/ndk/" + version,
+		} {
+			if st, err := os.Stat(d); err == nil && st.IsDir() {
+				ndk = d
+				break
+			}
+		}
+	}
+	if st, err := os.Stat(ndk); ndk == "" || err != nil || !st.IsDir() {
+		return false
+	}
+	if os.Getenv("ALLOW_ANY_NDK") == "1" {
+		return true
+	}
+	data, err := os.ReadFile(filepath.Join(ndk, "source.properties"))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == "Pkg.Revision" {
+			return strings.TrimSpace(v) == version
+		}
+	}
+	return false
+}
+
 // Available reports whether this target can run on the current host:
 //   - Apple targets (macOS / iOS) need macOS + Xcode.
 //   - Other native scripts are bash + Unix tools — fine on macOS / Linux /
-//     WSL, not on native Windows.
+//     WSL, not on native Windows; Android also needs the pinned NDK.
 //   - Docker targets (Linux / Windows cross builds) only need Docker.
 func (t Target) Available() bool {
 	switch {
 	case t.AppleOnly:
 		return hostOS == "darwin"
 	case t.kind == kNative:
-		return hostOS != "windows"
+		return hostOS != "windows" && (!t.NeedsNDK || ndkFound())
 	default:
 		return true
 	}
@@ -61,8 +122,15 @@ func (t Target) unavailReason() string {
 	if t.AppleOnly {
 		return "needs macOS + Xcode"
 	}
-	if t.kind == kNative {
+	if t.kind == kNative && hostOS == "windows" {
 		return "needs a macOS/Linux host (Unix build script)"
+	}
+	if t.NeedsNDK {
+		version := os.Getenv("NDK_VERSION")
+		if version == "" {
+			version = ndkVersion
+		}
+		return "needs Android NDK " + version
 	}
 	return "unavailable on this host"
 }
@@ -94,9 +162,9 @@ func allTargets() []Target {
 			Desc: "device arm64 + simulator arm64/x86_64 xcframework"},
 
 		// ── Android (native — NDK on the host) ──
-		{Key: "android-arm64-v8a", Label: "arm64-v8a", Group: "Android", InMenu: true, kind: kNative, script: sAndroid, env: []string{"ABIS=arm64-v8a"}},
-		{Key: "android-armeabi-v7a", Label: "armeabi-v7a", Group: "Android", InMenu: true, kind: kNative, script: sAndroid, env: []string{"ABIS=armeabi-v7a"}},
-		{Key: "android-x86_64", Label: "x86_64", Group: "Android", InMenu: true, kind: kNative, script: sAndroid, env: []string{"ABIS=x86_64"}},
+		{Key: "android-arm64-v8a", Label: "arm64-v8a", Group: "Android", InMenu: true, NeedsNDK: true, kind: kNative, script: sAndroid, env: []string{"ABIS=arm64-v8a"}},
+		{Key: "android-armeabi-v7a", Label: "armeabi-v7a", Group: "Android", InMenu: true, NeedsNDK: true, kind: kNative, script: sAndroid, env: []string{"ABIS=armeabi-v7a"}},
+		{Key: "android-x86_64", Label: "x86_64", Group: "Android", InMenu: true, NeedsNDK: true, kind: kNative, script: sAndroid, env: []string{"ABIS=x86_64"}},
 		{Key: "android", Label: "all", Group: "Android", InMenu: true, kind: kAggregate,
 			members: []string{"android-arm64-v8a", "android-armeabi-v7a", "android-x86_64"}},
 
