@@ -14,11 +14,12 @@
 #             symbol in verify/symbols.txt; libsmb2's licence texts
 #             (COPYING, LICENCE-LGPL-2.1.txt) are present and match
 #             licenses/libsmb2/; SHA256SUMS, when written, matches the files
-#   Linux     ELF machine per arch; no glibc symbol newer than 2.31; the
-#             host-arch library is dlopened on this glibc 2.31 system, its
-#             symbols resolved and a context created and destroyed
-#   Android   ELF machine per ABI; 16 KB segment alignment on the 64-bit ABIs;
-#             depends on nothing but libc / libdl / libm
+#   Linux     ELF machine per arch; stripped (no .symtab); no glibc symbol
+#             newer than 2.31; the host-arch library is dlopened on this
+#             glibc 2.31 system, its symbols resolved and a context created
+#             and destroyed
+#   Android   ELF machine per ABI; stripped; 16 KB segment alignment on the
+#             64-bit ABIs; depends on nothing but libc / libdl / libm
 #   Windows   PE machine per arch; imports only system DLLs (kernel32,
 #             ws2_32, bcrypt, the UCRT api sets)
 #   Apple     slices per xcframework; LC_BUILD_VERSION minimum OS within the
@@ -68,6 +69,15 @@ check_exports() {
 
 elf_machine() { readelf -hW "$1" | sed -n 's/^ *Machine: *//p'; }
 
+# check_stripped <name> <ELF file>: no static symbol table, only .dynsym.
+check_stripped() {
+  if readelf -SW "$2" | grep -q '\.symtab'; then
+    fail "$1: not stripped (.symtab present)"
+  else
+    ok "$1: stripped"
+  fi
+}
+
 # version_le A B — A <= B for dotted versions
 version_le() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
 
@@ -114,6 +124,7 @@ for arch in x86_64 aarch64; do
     x86_64:*X86-64*|aarch64:*AArch64*) ;;
     *) fail "$name: wrong ELF machine ($(elf_machine "$f"))" ;;
   esac
+  check_stripped "$name" "$f"
   newest="$(objdump -T "$f" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1)"
   if version_le "${newest:-0}" 2.31; then
     ok "$name: newest glibc symbol ${newest:-none} (floor 2.31)"
@@ -138,6 +149,7 @@ for abi in arm64-v8a armeabi-v7a x86_64; do
     arm64-v8a:*AArch64*|armeabi-v7a:ARM|x86_64:*X86-64*) ;;
     *) fail "$name: wrong ELF machine ($machine)" ;;
   esac
+  check_stripped "$name" "$f"
   if [ "$abi" != "armeabi-v7a" ]; then
     align="$(readelf -lW "$f" | awk '/LOAD/ {print $NF}' | sort -u)"
     for a in $align; do

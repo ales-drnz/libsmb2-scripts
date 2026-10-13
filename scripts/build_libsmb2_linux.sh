@@ -68,8 +68,9 @@ build_arch() {
 
   echo "  Linking $arch..."
   # No SONAME: consumers rename the file when they bundle it, and the
-  # loader then knows it by that name.
-  "$cc" -shared -o "$build/libsmb2.so" "$build"/*.o \
+  # loader then knows it by that name. -s drops the static symbol table;
+  # the exported API lives in .dynsym, which stays.
+  "$cc" -shared -s -o "$build/libsmb2.so" "$build"/*.o \
     -Wl,--version-script="$BUILD_DIR/exports.ver" \
     -Wl,--build-id=none \
     -pthread

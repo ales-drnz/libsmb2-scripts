@@ -121,7 +121,9 @@ build_abi() {
 
   echo "  Linking $abi..."
   # No SONAME: Flutter bundles the file under the name the package gives it.
-  "$cc" -shared -o "$build/libsmb2.so" "$build"/*.o \
+  # -s drops the static symbol table (the Android Gradle plugin would strip
+  # it anyway); the exported API lives in .dynsym, which stays.
+  "$cc" -shared -s -o "$build/libsmb2.so" "$build"/*.o \
     -Wl,--version-script="$BUILD_DIR/exports.ver" \
     -Wl,--build-id=none \
     -Wl,--as-needed
