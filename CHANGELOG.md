@@ -1,24 +1,30 @@
-## [0.2.0] - 12-10-2026
+## [0.2.0] - 13-10-2026
 
 ### Breaking
 - `./build checksums`, `./build bump` and the `lib-local` / `lib-remote` / `lib-clean` switch are gone: a build ends in `release_builds/` with `manifest.json`, and dart_smb2 takes the hashes into its build hook with `tool/update_libsmb2.sh`. Building needs no dart_smb2 checkout.
 - `src/smb2_wrapper.c`, unused since dart_smb2 0.1.0, is gone; each binary exports libsmb2's public API only.
 
 ### Added
-- `.github/workflows/build.yml`: every push to a `release/` branch builds all nine binaries on GitHub's runners, Apple included, and verifies them on x86_64 and arm64.
+- `.github/workflows/build.yml`: every push to a `release/` branch builds all nine binaries on GitHub's runners, Apple included (on `macos-26`), and verifies them on x86_64 and arm64. Its actions are pinned by commit SHA, on Node 24, and every job has a timeout.
 - `manifest.json` and `SHA256SUMS` with every build (`./build manifest`).
-- `patch_active_contexts_lock.py`: a lock around libsmb2's global context list, which dart_smb2's worker isolates change from several threads.
-- `patch_rmdir_disposition.py`: `rmdir` fails with `STATUS_DIRECTORY_NOT_EMPTY` instead of returning success and keeping the directory.
-- `licenses/libsmb2/`: libsmb2's `COPYING` and LGPL-2.1 text.
+- libsmb2's `COPYING` and `LICENCE-LGPL-2.1.txt` in `licenses/libsmb2/` and in every release: beside the binaries, listed in `SHA256SUMS` and under the `licenses` key of `manifest.json` (`assets` lists the binaries only), and inside both xcframework zips under `licenses/libsmb2/`. `verify` checks them.
+- `patch_active_contexts_lock.py`: a lock around libsmb2's global context list, which dart_smb2's worker isolates change from several threads; `smb2_context_active()` takes it too.
+- `patch_rmdir_disposition.py`: `rmdir` fails with `STATUS_DIRECTORY_NOT_EMPTY` on a directory with entries and with `STATUS_NOT_A_DIRECTORY` on a file, instead of returning success and keeping the directory, or deleting the file.
+- `patch_unlink_non_directory.py`: `unlink` on a directory fails with `STATUS_FILE_IS_A_DIRECTORY` (`-EPERM`) instead of deleting an empty one and returning success on one with entries.
+- `patch_compound_callbacks.py`: a compound that times out or is dropped by `smb2_destroy_context()` before it is sent calls every PDU's callback, not the first only, so rmdir and unlink (and mkdir, stat, truncate, rename) report the timeout once and free their data, and the synchronous calls return `-ETIMEDOUT` instead of polling forever.
 
 ### Changed
 - libsmb2 is upstream master of 11-10-2026 (e94eee9). Binaries: `libsmb2-r9`.
-- `verify` checks all nine binaries: exported symbols (`verify/symbols.txt`), machine, glibc floor, Android alignment and dependencies, Windows imports, Apple slices and minimum OS. It runs in its own Docker image.
-- Docker has one stage per job, base images pinned by digest and llvm-mingw by SHA-256; images are tagged with a hash of the Dockerfile and rebuilt when it changes, and containers run as the calling user.
-- Linux builds on Ubuntu 20.04: the libraries need glibc 2.31, not 2.38.
+- `patch_nterror_reporting.py` also records the NT status of rename / link and echo failures, and the timeout sweep records `SMB2_STATUS_IO_TIMEOUT`, so a failure never reports the status of an earlier one.
+- `verify` checks all nine binaries: exported symbols (`verify/symbols.txt`), machine, glibc floor, stripped Linux and Android libraries, Android alignment and dependencies, Windows imports, Apple slices and minimum OS, and the licence texts and `SHA256SUMS` of a release. It runs in its own Docker image.
+- Docker has one stage per job, base images pinned by digest, llvm-mingw by SHA-256 and the Linux and Verify stages' apt packages at exact versions (the Windows stage's helper packages stay unpinned, and the Dockerfile says why); images are tagged with a hash of the Dockerfile and rebuilt when it changes, and containers run as the calling user.
+- Linux builds on Ubuntu 20.04: the libraries reference no glibc symbol newer than `GLIBC_2.25` and are verified on 2.31, the floor `verify` enforces (r8 needed 2.38).
+- The Linux and Android libraries are stripped; the exported API stays in `.dynsym`.
 - Windows builds both architectures with llvm-mingw and without a PE timestamp; with `LC_ALL=C` link order, Linux, Android and Windows builds are byte for byte reproducible.
 - Android requires the pinned NDK unless `ALLOW_ANY_NDK=1`, and links libc only. Apple targets iOS 13.0 and macOS 10.15 and uses CommonCrypto for AES.
+- `./build all` builds what this host can and skips the rest with a line saying why; a target named explicitly still fails.
 - `JOBS` applies to every platform, and a failed compile stops the build.
+- `export_sources.sh` points at dart_smb2's `tool/ffigen.dart` and `tool/bindings_drift.dart`.
 - Each patch script states that its code is added to libsmb2 under the LGPL-2.1.
 
 ### Fixed

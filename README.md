@@ -38,9 +38,9 @@ On Windows use `build.cmd`. You need Go, plus Docker for Linux and Windows, the 
 | Linux | x86_64, aarch64 | `libsmb2_linux-<arch>.so` |
 | Windows | x86_64, arm64 | `libsmb2_windows-<arch>.dll` |
 
-Each library exports libsmb2's public API (`lib/libsmb2.syms`) and nothing else, and has no SONAME, so the app bundles it under its own name. The Linux ones need glibc 2.31 or later; the Android ones depend on libc only and align their 64-bit segments to 16 KB; the Windows ones import only system DLLs; the Apple ones target iOS 13.0 and macOS 10.15.
+Each library exports libsmb2's public API (`lib/libsmb2.syms`) and nothing else, and has no SONAME, so the app bundles it under its own name. The Linux ones reference no glibc symbol newer than 2.25 and are built and tested on glibc 2.31, the oldest supported; the Android ones depend on libc only and align their 64-bit segments to 16 KB; the Linux and Android ones are stripped, keeping only the dynamic symbol table; the Windows ones import only system DLLs; the Apple ones target iOS 13.0 and macOS 10.15.
 
-The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_versions.sh`, the Docker base images are pinned by digest and llvm-mingw by SHA-256, and the Android NDK is pinned by version. Linux, Android and Windows builds give the same bytes on any machine. A build also writes `release_builds/manifest.json` and `SHA256SUMS`, with the release, the libsmb2 pin, the source commit, the patches, the verified symbols and the hash of every library.
+The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_versions.sh`, the Docker base images are pinned by digest, llvm-mingw by SHA-256 and the apt packages of the Linux and Verify images by version, and the Android NDK is pinned by version. Linux, Android and Windows builds give the same bytes on any machine. A build also writes `release_builds/manifest.json` and `SHA256SUMS`, with the release, the libsmb2 pin, the source commit, the patches, the verified symbols and the hash of every library, and copies libsmb2's licence texts (`COPYING`, `LICENCE-LGPL-2.1.txt`) beside them; the xcframework zips carry them too.
 
 ---
 
@@ -125,7 +125,7 @@ Apple targets need a Mac. [GitHub Actions](#35-on-github-actions) builds everyth
 
 #### 1.3 Folder layout
 
-Building needs only this repo. The libraries, `manifest.json` and `SHA256SUMS` land in `release_builds/`; the pinned tarball is cached in `sources/cache/`; `./build sources` writes the patched tree that `dart_smb2`'s `tool/ffigen.dart` reads to `sources/libsmb2-src/`.
+Building needs only this repo. The libraries, `manifest.json`, `SHA256SUMS` and libsmb2's licence texts land in `release_builds/`; the pinned tarball is cached in `sources/cache/`; `./build sources` writes the patched tree that `dart_smb2`'s `tool/ffigen.dart` reads to `sources/libsmb2-src/`.
 
 ---
 
@@ -138,7 +138,7 @@ Run `./build`. Arrow keys move, Space selects, Enter confirms, Q quits. The keys
 Three tabs:
 
 - **Compile**: pick platforms and architectures, then press Build. Each build shows its progress and time, and Enter opens its log. The queue stops at the first failure.
-- **Tools**: write `manifest.json` and `SHA256SUMS` for the built libraries (Manifest), check them (Verify), and export the patched sources for `dart_smb2`'s bindings (Sources).
+- **Tools**: write `manifest.json` and `SHA256SUMS` for the built libraries, with the licence texts (Manifest), check them (Verify), and export the patched sources for `dart_smb2`'s bindings (Sources).
 - **Docker**: see, build or delete the Docker images. The image a build needs is created automatically the first time, and again when `docker/Dockerfile` changes.
 
 #### 2.2 Patches
@@ -181,7 +181,7 @@ Android builds on the host with the pinned NDK, found in the SDK folder or throu
 `./build` accepts targets as arguments and runs them in order, stopping at the first failure:
 
 ```bash
-./build all            # everything this host can build, then the manifest
+./build all            # everything this host can build, then the manifest; the rest is skipped
 ./build linux verify   # build Linux, then verify everything built
 ./build list           # every target
 ```
@@ -196,7 +196,7 @@ These variables are passed to the builds:
 
 #### 3.5 On GitHub Actions
 
-Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included, collects them with `manifest.json` and `SHA256SUMS` in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31.
+Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31.
 
 ---
 
@@ -207,8 +207,8 @@ Every push to a `release/` branch, and every pull request, runs `.github/workflo
 From 0.2.0, `dart_smb2` gets libsmb2 through a build hook (`hook/build.dart`). When an app builds, the hook downloads the library for the target from the package's `libsmb2-rN` GitHub release and checks its SHA-256. To point the package at a release, run this in `dart_smb2`:
 
 ```bash
-tool/update_libsmb2.sh r9                        # a published release
-tool/update_libsmb2.sh r9 path/to/manifest.json  # before publishing it
+tool/update_libsmb2.sh r9                         # a published release
+tool/update_libsmb2.sh r9 path/to/manifest.json   # before publishing it
 ```
 
 It writes the release and the hashes from `manifest.json` into the hook.
@@ -226,13 +226,13 @@ hooks:
 
 #### 4.3 Verifying
 
-`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), the ELF or PE machine, the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, and a context created and destroyed.
+`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), that libsmb2's licence texts are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, the stripped Linux and Android libraries, the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, and a context created and destroyed.
 
 #### 4.4 Publishing a release
 
 1. Build all nine libraries, usually by pushing a `release/` branch (see [3.5](#35-on-github-actions)).
 2. Tag the commit `libsmb2-rN` in this repository.
-3. Create the `libsmb2-rN` release on `dart_smb2` and upload the libraries, `manifest.json` and `SHA256SUMS`, naming this repository's commit in its notes.
+3. Create the `libsmb2-rN` release on `dart_smb2` and upload the libraries, `COPYING`, `LICENCE-LGPL-2.1.txt`, `manifest.json` and `SHA256SUMS`, naming this repository's commit in its notes.
 4. In `dart_smb2`, run `tool/update_libsmb2.sh rN`.
 
 ---
@@ -250,10 +250,12 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | Patch | Scope | What it does |
 | :--- | :--- | :--- |
 | `patch_active_contexts_lock.py` | shared | locks the global context list, which dart_smb2's worker isolates change from several threads |
-| `patch_nterror_reporting.py` | shared | records the NT status on stat, truncate and open failures |
+| `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out or is dropped before it is sent, so rmdir, unlink and the other path calls report it |
+| `patch_nterror_reporting.py` | shared | records the NT status on stat, truncate, open, rename, echo and timeout failures |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
 | `patch_socket_close_guard.py` | shared | stops the read loop once a callback closed the context |
+| `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory |
 | `patch_utimes.py` | shared | adds `smb2_utimes()`, behind `dart_smb2`'s `setFileTimes` |
 | `patch_windows_csprng.py` | windows | uses `BCryptGenRandom` for the client challenge, salt and nonce |
 | `patch_windows_headers.py` | windows | builds with llvm-mingw's headers |
@@ -283,6 +285,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 ## Licensing
 
 - libsmb2's `lib/` and `include/` are licensed under the LGPL-2.1 or later; the texts are in [`licenses/libsmb2/`](licenses/libsmb2/). The code the patches add to libsmb2 is under the same terms.
+- Each `libsmb2-rN` release, from r9, ships `COPYING` and `LICENCE-LGPL-2.1.txt` beside the binaries and inside the xcframework zips.
 - Each `libsmb2-rN` release names, in its `manifest.json`, the commit of this repository it was built from: that commit, with the upstream tarball it pins, is the corresponding source of the release's binaries.
 - The scripts, the patch scripts themselves and the TUI are BSD-3-Clause, see [LICENSE](LICENSE).
 

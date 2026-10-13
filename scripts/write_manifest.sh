@@ -27,7 +27,8 @@
 # SHA256SUMS lists the binaries and the licence texts. dart_smb2's
 # tool/update_libsmb2.sh copies the asset hashes into its build hook, and
 # tool/bindings_drift.dart wants every entry of `assets` pinned there: the
-# licence texts stay out of `assets`, which keeps its pre-r10 meaning.
+# licence texts stay out of `assets`, which lists the binaries only, as dart_smb2's
+# tool/update_libsmb2.sh and bindings_drift.dart expect.
 #
 # Usage (from the repo root): scripts/write_manifest.sh
 # RELEASE_DIR overrides the directory it reads and writes; SOURCE_COMMIT
