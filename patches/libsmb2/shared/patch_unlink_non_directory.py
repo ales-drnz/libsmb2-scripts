@@ -14,11 +14,27 @@ The open now also carries FILE_NON_DIRECTORY_FILE, so a directory fails
 with STATUS_FILE_IS_A_DIRECTORY (-EPERM, which posix allows unlink() to
 return for a directory), as DeleteFile does on Windows. This is the
 mirror of patch_rmdir_disposition.py, whose FILE_DIRECTORY_FILE makes
-rmdir on a file fail with STATUS_NOT_A_DIRECTORY. A server-side symlink
-to a directory, which Samba follows and unlink() used to leave in place
-while returning 0, fails the same way; a symlink to a file is still
-removed. The symlink cleanup, which removes a placeholder directory
-through the same function with is_dir set, is left as it was.
+rmdir on a file fail with STATUS_NOT_A_DIRECTORY. The symlink cleanup,
+which removes a placeholder directory through the same function with
+is_dir set, is left as it was.
+
+Links to directories:
+  - Windows: the open still carries FILE_OPEN_REPARSE_POINT, so it opens
+    the link itself, and a directory junction or directory symlink is a
+    directory object. unlink() of one now fails with
+    STATUS_FILE_IS_A_DIRECTORY instead of removing the link; remove it
+    with rmdir, which opens with FILE_DIRECTORY_FILE |
+    FILE_OPEN_REPARSE_POINT and removes the link, not its target (as
+    RemoveDirectory does on Windows). A symlink to a file is still
+    removed by unlink().
+  - Samba follows symlinks on the server and does not hand SMB2 the link
+    itself without the SMB3 POSIX extensions, which libsmb2 does not
+    negotiate. A symlink to a directory fails unlink() with
+    STATUS_FILE_IS_A_DIRECTORY (it used to return 0 and stay) and rmdir()
+    with STATUS_DIRECTORY_NOT_EMPTY or STATUS_NOT_A_DIRECTORY; it cannot
+    be removed over SMB2, and its target is never touched. A symlink to a
+    file is removed by unlink() and its target kept; a dangling symlink
+    fails with STATUS_OBJECT_NAME_NOT_FOUND, as before.
 
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
