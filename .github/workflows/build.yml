@@ -5,6 +5,10 @@ name: Build
 # SHA256SUMS and libsmb2's licence texts into one artifact, and checks them
 # with verify_binaries.sh on both runner architectures. Publishing the
 # libsmb2-<release> GitHub release on dart_smb2 stays a manual step.
+#
+# Actions are pinned by commit SHA (the tag in the comment), and the macOS
+# runner by image version (macos-26, the one macos-latest resolved to for
+# r9), so a later run uses the same tools.
 on:
   push:
     branches: ['release/**']
@@ -22,8 +26,9 @@ jobs:
   linux:
     name: Linux
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build --target linux -t libsmb2-build-linux docker/
       # ubuntu:20.04 image: glibc 2.31 floor; aarch64 is cross-compiled.
       - name: Build
@@ -31,7 +36,7 @@ jobs:
           docker run --rm -u "$(id -u):$(id -g)" \
             -v "$PWD:/scripts" -w /scripts \
             libsmb2-build-linux bash scripts/build_libsmb2_linux.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux
           path: release_builds/libsmb2_linux-*.so
@@ -40,17 +45,18 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       NDK_VERSION: 28.2.13676358
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned NDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
       - name: Build
         run: bash scripts/build_libsmb2_android.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: android
           path: release_builds/libsmb2_android-*.so
@@ -59,15 +65,16 @@ jobs:
   windows:
     name: Windows
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build --target windows -t libsmb2-build-windows docker/
       - name: Build
         run: |
           docker run --rm -u "$(id -u):$(id -g)" \
             -v "$PWD:/scripts" -w /scripts \
             libsmb2-build-windows bash scripts/build_libsmb2_windows.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows
           path: release_builds/libsmb2_windows-*.dll
@@ -75,7 +82,8 @@ jobs:
 
   apple:
     name: ${{ matrix.name }}
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -87,10 +95,10 @@ jobs:
             script: scripts/build_libsmb2_ios.sh
             output: release_builds/libsmb2_ios.xcframework.zip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build
         run: bash ${{ matrix.script }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.output }}
@@ -100,9 +108,10 @@ jobs:
     name: Collect release
     needs: [linux, android, windows, apple]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
       # write_manifest.sh also copies licenses/libsmb2/ (COPYING and the
@@ -116,7 +125,7 @@ jobs:
           bash scripts/write_manifest.sh
           ls -la release_builds
           cat release_builds/SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: libsmb2-release
           path: release_builds/
@@ -128,13 +137,14 @@ jobs:
     name: Verify (${{ matrix.os }})
     needs: release
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, ubuntu-24.04-arm]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: libsmb2-release
           path: release_builds

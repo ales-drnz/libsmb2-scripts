@@ -18,24 +18,35 @@
 #             minimum OS) and dlopens the ones this host can load, on the
 #             oldest glibc the Linux libraries promise to support.
 #
-# Base images are pinned by digest and llvm-mingw by SHA-256, so an image
-# built later holds the same toolchain. The orchestrator tags each image with
-# a hash of this file and rebuilds it when the file changes. The Android NDK
-# is not here: build_libsmb2_android.sh runs on the host (or on the CI
-# runner) with the pinned NDK.
+# Base images are pinned by digest, llvm-mingw by SHA-256, and the apt
+# packages of the two ubuntu:20.04 stages (the Linux compilers, the verify
+# tools) by exact version: focal's archive no longer changes, so an image
+# built later holds the same toolchain, and a version that ever went missing
+# would stop the build instead of changing it. Their dependencies come with
+# them unpinned, from the same frozen archive. The windows stage's four apt
+# packages (certificates, curl, python3, xz) are not part of the toolchain
+# and stay unpinned: noble's archive drops a version as soon as it is
+# superseded, so a pin there would break the build at the next update.
+#
+# The orchestrator tags each image with a hash of this file and rebuilds it
+# when the file changes. The Android NDK is not here:
+# build_libsmb2_android.sh runs on the host (or on the CI runner) with the
+# pinned NDK.
 
 # ══════════════════════════════════════════════════════════════════════════════
 FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214 AS linux
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      gcc \
-      libc6-dev \
-      gcc-aarch64-linux-gnu \
-      libc6-dev-arm64-cross \
-      ca-certificates \
-      curl \
-      python3 \
+      gcc=4:9.3.0-1ubuntu2 \
+      gcc-9=9.4.0-1ubuntu1~20.04.2 \
+      libc6-dev=2.31-0ubuntu9.18 \
+      gcc-aarch64-linux-gnu=4:9.3.0-1ubuntu2 \
+      gcc-9-aarch64-linux-gnu=9.4.0-1ubuntu1~20.04.2cross2 \
+      libc6-dev-arm64-cross=2.31-0ubuntu9.9cross1 \
+      ca-certificates=20240203~20.04.1 \
+      curl=7.68.0-1ubuntu2.25 \
+      python3=3.8.2-0ubuntu2 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /scripts
 
@@ -75,13 +86,14 @@ FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2faf
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      binutils \
-      binutils-aarch64-linux-gnu \
-      gcc \
-      libc6-dev \
-      llvm-10 \
-      python3 \
-      unzip \
+      binutils=2.34-6ubuntu1.11 \
+      binutils-aarch64-linux-gnu=2.34-6ubuntu1.11 \
+      gcc=4:9.3.0-1ubuntu2 \
+      gcc-9=9.4.0-1ubuntu1~20.04.2 \
+      libc6-dev=2.31-0ubuntu9.18 \
+      llvm-10=1:10.0.0-4ubuntu1 \
+      python3=3.8.2-0ubuntu2 \
+      unzip=6.0-25ubuntu1.2 \
     && rm -rf /var/lib/apt/lists/*
 ENV PATH=/usr/lib/llvm-10/bin:$PATH
 WORKDIR /scripts
