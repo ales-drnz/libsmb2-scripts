@@ -18,6 +18,11 @@ hands out the head of the list for the server-side loops in
 lib/libsmb2.c, which walk it after the call returns, so no lock inside it
 could cover them; dart_smb2 never runs those loops, and it is left as is.
 
+smb2_init_context() also bumps a function-static counter that seeds the
+random() fallback of smb2_random_bytes(); concurrent calls raced on it
+(harmless, but ThreadSanitizer reports it). The increment now takes the
+same lock and copies the value into a local.
+
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
 """
@@ -87,7 +92,26 @@ active_new = (
     "        return found;\n"
 )
 
-for old in (decl_old, add_old, remove_old, active_old):
+ctr_old = (
+    "        static int ctr;\n"
+    "\n"
+    "        /* Only seeds the fallback path in smb2_random_bytes(). */\n"
+    "        srandom((unsigned)time(NULL) ^ getpid() ^ ctr++);\n"
+)
+ctr_new = (
+    "        static int ctr;\n"
+    "        int seed;\n"
+    "\n"
+    "        /* dart_smb2: ctr is shared by every thread creating a context. */\n"
+    "        ACTIVE_CONTEXTS_LOCK();\n"
+    "        seed = ctr++;\n"
+    "        ACTIVE_CONTEXTS_UNLOCK();\n"
+    "\n"
+    "        /* Only seeds the fallback path in smb2_random_bytes(). */\n"
+    "        srandom((unsigned)time(NULL) ^ getpid() ^ seed);\n"
+)
+
+for old in (decl_old, add_old, remove_old, active_old, ctr_old):
     if content.count(old) != 1:
         print(f"ERROR: anchor {old.strip()!r} not found exactly once in lib/init.c (upstream drifted?)")
         sys.exit(1)
@@ -96,6 +120,7 @@ content = content.replace(decl_old, decl_new, 1)
 content = content.replace(add_old, add_new, 1)
 content = content.replace(remove_old, remove_new, 1)
 content = content.replace(active_old, active_new, 1)
+content = content.replace(ctr_old, ctr_new, 1)
 with open(fn, "w") as f:
     f.write(content)
-print("Patched lib/init.c: active_contexts list mutations and smb2_context_active() take a lock")
+print("Patched lib/init.c: active_contexts list mutations, smb2_context_active() and the seed counter take a lock")
