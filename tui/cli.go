@@ -61,7 +61,8 @@ EXAMPLES
   ./build                          # open the dashboard
   ./build linux windows            # desktop builds (Docker)
   ./build macos verify             # build macOS, then verify everything built
-  ./build all                      # everything this host can build, then the manifest
+  ./build all                      # everything this host can build; the manifest
+                                   # too when nothing had to be skipped
 
 KNOBS (env, forwarded into Docker builds)
   JOBS=N  KEEP_BUILD=1  FORCE_DOWNLOAD=1

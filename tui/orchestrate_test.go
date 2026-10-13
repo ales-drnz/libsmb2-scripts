@@ -84,14 +84,16 @@ func TestEveryAggregateMemberExists(t *testing.T) {
 
 func TestExpandSkipsUnavailableAggregateMembers(t *testing.T) {
 	// `./build all` on Linux: macOS and iOS are left out with a reason,
-	// everything else (Android, Linux, Windows, the manifest) still runs.
+	// Android, Linux and Windows still build, and the manifest, which
+	// would describe a partial release, is left out too.
 	onHost(t, "linux", true)
 
 	got, skipped, err := testCtx().expand([]string{"android", "all"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantSkipped := []string{"macos: needs macOS + Xcode", "ios: needs macOS + Xcode"}
+	wantSkipped := []string{"macos: needs macOS + Xcode", "ios: needs macOS + Xcode",
+		"manifest: the release would be partial (run ./build manifest once all nine binaries are in release_builds/)"}
 	if len(skipped) != len(wantSkipped) {
 		t.Fatalf("skipped %q, want %q", skipped, wantSkipped)
 	}
@@ -104,7 +106,7 @@ func TestExpandSkipsUnavailableAggregateMembers(t *testing.T) {
 	for _, tg := range got {
 		keys[tg.Key] = true
 	}
-	for _, k := range []string{"android-arm64-v8a", "linux-x86_64", "windows-arm64", "manifest"} {
+	for _, k := range []string{"android-arm64-v8a", "linux-x86_64", "windows-arm64"} {
 		if !keys[k] {
 			t.Errorf("%s missing from the expansion of all", k)
 		}
@@ -112,14 +114,39 @@ func TestExpandSkipsUnavailableAggregateMembers(t *testing.T) {
 	if keys["macos"] || keys["ios"] {
 		t.Error("an Apple target was kept on a linux host")
 	}
-	if got[len(got)-1].Key != "manifest" {
-		t.Errorf("last target = %q, want manifest", got[len(got)-1].Key)
+	if keys["manifest"] {
+		t.Error("all kept the manifest although macOS and iOS were skipped")
 	}
 
 	// Named explicitly, an unavailable target still fails, even after an
 	// aggregate skipped it.
 	if _, _, err := testCtx().expand([]string{"all", "macos"}); err == nil {
 		t.Fatal("expected an error: macos named on a linux host")
+	}
+}
+
+func TestExpandAllWritesTheManifestWhenNothingIsSkipped(t *testing.T) {
+	onHost(t, "darwin", true)
+	got, skipped, err := testCtx().expand([]string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("skipped %q on a macOS host with the NDK", skipped)
+	}
+	if got[len(got)-1].Key != "manifest" {
+		t.Errorf("last target = %q, want manifest", got[len(got)-1].Key)
+	}
+}
+
+func TestExpandKeepsAManifestNamedExplicitly(t *testing.T) {
+	onHost(t, "linux", true)
+	got, _, err := testCtx().expand([]string{"all", "manifest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[len(got)-1].Key != "manifest" {
+		t.Errorf("last target = %q, want manifest (named explicitly)", got[len(got)-1].Key)
 	}
 }
 
@@ -153,7 +180,7 @@ func TestExpandAllWithoutTheNDKSkipsAndroid(t *testing.T) {
 		}
 	}
 	for k := range keys {
-		if strings.HasPrefix(k, "android-") {
+		if strings.HasPrefix(k, "android-") || k == "manifest" {
 			t.Errorf("%s kept without the NDK", k)
 		}
 	}

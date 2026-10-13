@@ -151,7 +151,9 @@ func (c *buildCtx) imageMissing(stage string) bool {
 // from an aggregate (`./build all` on Linux skips macOS and iOS): skipped
 // lists those, as "<key>: <reason>". An aggregate named explicitly that
 // leaves nothing to run (`./build android` without the NDK) is an error too;
-// `all` never is.
+// `all` never is. When anything was skipped, the manifest that `all` ends
+// with is left out as well, since it would describe a partial release; named
+// explicitly (`./build manifest`), it still runs.
 func (c *buildCtx) expand(keys []string) (out []Target, skipped []string, err error) {
 	seen, skippedSeen := map[string]bool{}, map[string]bool{}
 	var reasons []string // why the key being walked lost targets
@@ -190,6 +192,7 @@ func (c *buildCtx) expand(keys []string) (out []Target, skipped []string, err er
 		}
 		return 1, nil
 	}
+	manifestNamed := false
 	for _, k := range keys {
 		k = strings.TrimSpace(k)
 		reasons = nil
@@ -200,6 +203,19 @@ func (c *buildCtx) expand(keys []string) (out []Target, skipped []string, err er
 		if n == 0 && k != "all" {
 			return nil, nil, fmt.Errorf("target %q: nothing in it can run on this host (%s)", k, strings.Join(reasons, "; "))
 		}
+		if k == "manifest" {
+			manifestNamed = true
+		}
+	}
+	if len(skipped) > 0 && seen["manifest"] && !manifestNamed {
+		kept := out[:0]
+		for _, t := range out {
+			if t.Key != "manifest" {
+				kept = append(kept, t)
+			}
+		}
+		out = kept
+		skipped = append(skipped, "manifest: the release would be partial (run ./build manifest once all nine binaries are in release_builds/)")
 	}
 
 	var images []Target

@@ -7,8 +7,9 @@
 #
 #   ./build                 interactive dashboard (pick targets, watch progress)
 #   ./build linux windows   headless: desktop cross builds via Docker
-#   ./build all             everything this host can build, then the manifest
-#                           (targets it cannot build are skipped)
+#   ./build all             everything this host can build (targets it
+#                           cannot build are skipped), then the manifest when
+#                           nothing was skipped
 #   ./build list            list every target
 #   ./build patches         list the patch set applied to upstream libsmb2
 #   ./build help            usage

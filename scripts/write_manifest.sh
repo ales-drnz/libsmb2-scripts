@@ -30,6 +30,12 @@
 # licence texts stay out of `assets`, which lists the binaries only, as dart_smb2's
 # tool/update_libsmb2.sh and bindings_drift.dart expect.
 #
+# It fails unless release_builds/ holds exactly the nine release assets, so
+# a partial build (or a stale binary left from an earlier one) never gets a
+# manifest that looks complete. ALLOW_PARTIAL=1 writes one for whatever
+# subset is there, with a warning; an unexpected libsmb2_* file is always an
+# error.
+#
 # Usage (from the repo root): scripts/write_manifest.sh
 # RELEASE_DIR overrides the directory it reads and writes; SOURCE_COMMIT
 # overrides the recorded libsmb2-scripts commit (CI passes $GITHUB_SHA).
@@ -54,18 +60,53 @@ if [ -z "${SOURCE_COMMIT_ALLOW_DIRTY:-}" ] && [ -n "$(git -C "$ROOT" status --po
   echo "         the manifest's source commit does not describe these binaries." >&2
 fi
 
-RELEASE_DIR="$RELEASE_DIR" ROOT="$ROOT" SOURCE_COMMIT="$SOURCE_COMMIT" python3 - <<'PY'
-import hashlib, json, os, pathlib
+RELEASE_DIR="$RELEASE_DIR" ROOT="$ROOT" SOURCE_COMMIT="$SOURCE_COMMIT" \
+  ALLOW_PARTIAL="${ALLOW_PARTIAL:-0}" python3 - <<'PY'
+import hashlib, json, os, pathlib, sys
 
 root = pathlib.Path(os.environ["ROOT"])
 release_dir = pathlib.Path(os.environ["RELEASE_DIR"])
 
-assets = {}
-for f in sorted(release_dir.iterdir()):
-    if f.is_file() and f.name.startswith("libsmb2_"):
-        assets[f.name] = hashlib.sha256(f.read_bytes()).hexdigest()
-if not assets:
+# The nine release assets (verify_binaries.sh checks the same set).
+EXPECTED = [
+    "libsmb2_android-arm64-v8a.so",
+    "libsmb2_android-armeabi-v7a.so",
+    "libsmb2_android-x86_64.so",
+    "libsmb2_ios.xcframework.zip",
+    "libsmb2_linux-aarch64.so",
+    "libsmb2_linux-x86_64.so",
+    "libsmb2_macos.xcframework.zip",
+    "libsmb2_windows-arm64.dll",
+    "libsmb2_windows-x86_64.dll",
+]
+
+found = sorted(
+    f.name for f in release_dir.iterdir()
+    if f.is_file() and f.name.startswith("libsmb2_")
+)
+unexpected = [n for n in found if n not in EXPECTED]
+missing = [n for n in EXPECTED if n not in found]
+if unexpected:
+    raise SystemExit(f"Unexpected files in {release_dir}: {', '.join(unexpected)}")
+if not found:
     raise SystemExit(f"No libsmb2_* binaries in {release_dir}")
+if missing:
+    if os.environ["ALLOW_PARTIAL"] != "1":
+        raise SystemExit(
+            f"{len(found)} of the {len(EXPECTED)} release assets in {release_dir}; "
+            f"missing: {', '.join(missing)}.\n"
+            "Build them (CI builds all nine), or set ALLOW_PARTIAL=1 for a "
+            "manifest of this subset only."
+        )
+    bar = "!" * 72
+    print(f"{bar}\nWARNING: ALLOW_PARTIAL=1: this manifest lists {len(found)} of the "
+          f"{len(EXPECTED)} release assets\nand is NOT a release. Missing: "
+          f"{', '.join(missing)}\n{bar}", file=sys.stderr)
+
+assets = {
+    name: hashlib.sha256((release_dir / name).read_bytes()).hexdigest()
+    for name in found
+}
 licenses = {
     name: hashlib.sha256((release_dir / name).read_bytes()).hexdigest()
     for name in ("COPYING", "LICENCE-LGPL-2.1.txt")
