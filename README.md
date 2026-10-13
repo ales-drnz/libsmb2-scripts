@@ -38,9 +38,9 @@ On Windows use `build.cmd`. You need Go, plus Docker for Linux and Windows, the 
 | Linux | x86_64, aarch64 | `libsmb2_linux-<arch>.so` |
 | Windows | x86_64, arm64 | `libsmb2_windows-<arch>.dll` |
 
-Each library exports libsmb2's public API (`lib/libsmb2.syms`) and nothing else, and has no SONAME, so the app bundles it under its own name. The Linux ones reference no glibc symbol newer than 2.25 and are built and tested on glibc 2.31, the oldest supported; the Android ones depend on libc only and align their 64-bit segments to 16 KB; the Linux and Android ones are stripped, keeping only the dynamic symbol table; the Windows ones import only system DLLs; the Apple ones target iOS 13.0 and macOS 10.15.
+Each library exports libsmb2's public API (`lib/libsmb2.syms`) and nothing else, and has no SONAME, so the app bundles it under its own name. The Linux ones reference no glibc symbol newer than 2.25 and are built and tested on glibc 2.31, the oldest supported; the Android ones depend on libc only and align their 64-bit segments to 16 KB; the Windows ones import only system DLLs; all of them are stripped: the Linux and Android ones keep only the dynamic symbol table, the Windows ones carry no DWARF and no COFF symbol table beside their export table, and the Apple ones have no local symbols; the Apple ones target iOS 13.0 and macOS 10.15.
 
-The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_versions.sh`, the Docker base images are pinned by digest, llvm-mingw by SHA-256 and the apt packages of the Linux and Verify images by version, and the Android NDK is pinned by version. Linux, Android and Windows builds give the same bytes on any machine. A build also writes `release_builds/manifest.json` and `SHA256SUMS`, with the release, the libsmb2 pin, the source commit, the patches, the verified symbols and the hash of every library, and copies libsmb2's licence texts (`COPYING`, `LICENCE-LGPL-2.1.txt`) beside them; the xcframework zips carry them too.
+The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_versions.sh`, the Docker base images are pinned by digest, llvm-mingw by SHA-256 and the apt packages of the Linux and Verify images by version, and the Android NDK is pinned by version. Linux, Android and Windows builds give the same bytes on any machine. `./build manifest` writes `release_builds/manifest.json` and `SHA256SUMS` once all nine libraries are there (CI always builds all nine), with the release, the libsmb2 pin, the source commit, the patches, the verified symbols and the hash of every library, and copies libsmb2's licence texts (`COPYING`, `LICENCE-LGPL-2.1.txt`) beside them; the xcframework zips carry them too.
 
 ---
 
@@ -118,7 +118,7 @@ The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_ve
 | Host | Targets |
 | :--- | :--- |
 | macOS | all of them |
-| Linux | all except macOS and iOS |
+| Linux | all except macOS and iOS (Android with the NDK) |
 | Windows | Linux and Windows |
 
 Apple targets need a Mac. [GitHub Actions](#35-on-github-actions) builds everything, whatever you have.
@@ -169,7 +169,7 @@ Both build in Docker and run as your user, so `release_builds/` stays yours. Lin
 
 #### 3.3 Android
 
-Android builds on the host with the pinned NDK, found in the SDK folder or through `NDK_HOME`. Another NDK version stops the build unless `ALLOW_ANY_NDK=1`.
+Android builds on the host with the pinned NDK, found in the SDK folder or through `NDK_HOME` (or `ANDROID_NDK_HOME`, `ANDROID_NDK`). Another NDK version stops the build unless `ALLOW_ANY_NDK=1`. Without the NDK the Android targets are greyed out, `./build all` skips them, and naming one fails.
 
 ```bash
 ./build android                  # all three ABIs
@@ -181,10 +181,12 @@ Android builds on the host with the pinned NDK, found in the SDK folder or throu
 `./build` accepts targets as arguments and runs them in order, stopping at the first failure:
 
 ```bash
-./build all            # everything this host can build, then the manifest; the rest is skipped
+./build all            # everything this host can build; the rest is skipped
 ./build linux verify   # build Linux, then verify everything built
 ./build list           # every target
 ```
+
+`./build all` skips what this host cannot build with a line saying why (macOS and iOS off a Mac, Android without the NDK). It writes the manifest only when it skipped nothing, so a Linux machine never produces a `manifest.json` for part of a release; `write_manifest.sh` itself refuses anything but the nine libraries, and `ALLOW_PARTIAL=1 ./build manifest` writes one for a subset, with a warning. A target named explicitly that cannot run here is an error, and so is a group such as `android` none of whose targets can.
 
 These variables are passed to the builds:
 
@@ -196,7 +198,7 @@ These variables are passed to the builds:
 
 #### 3.5 On GitHub Actions
 
-Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31.
+Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31.
 
 ---
 
@@ -226,7 +228,7 @@ hooks:
 
 #### 4.3 Verifying
 
-`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), that libsmb2's licence texts are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, the stripped Linux and Android libraries, the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, and a context created and destroyed.
+`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), that libsmb2's licence texts are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, that every library is stripped (no `.symtab` on ELF, no `.debug_*` section or COFF symbol on PE, no local symbol in a Mach-O slice), the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, and a context created and destroyed.
 
 #### 4.4 Publishing a release
 
@@ -245,21 +247,25 @@ Each build downloads the pinned tarball and checks its SHA-256, extracts a fresh
 
 #### 5.1 The patch set
 
-Every patch is a Python script with a docstring that says why it exists. It finds its place by exact text and stops the build when upstream has changed underneath it.
+Every patch is a Python script with a docstring that says why it exists. It finds its place by exact text and stops the build when upstream has changed underneath it. The build applies them in alphabetical order, but none depends on that: any order gives the same tree.
 
 | Patch | Scope | What it does |
 | :--- | :--- | :--- |
-| `patch_active_contexts_lock.py` | shared | locks the global context list, which dart_smb2's worker isolates change from several threads |
-| `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out or is dropped before it is sent, so rmdir, unlink and the other path calls report it |
+| `patch_active_contexts_lock.py` | shared | locks the global context list, which dart_smb2's worker isolates change from several threads, and the seed counter of `smb2_init_context()` |
+| `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out or is dropped before it is sent, so rmdir, unlink and the other path calls report it, and makes `fstat`'s second callback check for a reply first |
+| `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir` and `ftruncate` when their first request cannot be built |
 | `patch_nterror_reporting.py` | shared | records the NT status on stat, truncate, open, rename, echo and timeout failures |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
 | `patch_socket_close_guard.py` | shared | stops the read loop once a callback closed the context |
-| `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory |
+| `patch_truncate_non_directory.py` | shared | makes `truncate` fail on a directory |
+| `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory, and so on a link to one (see below) |
 | `patch_utimes.py` | shared | adds `smb2_utimes()`, behind `dart_smb2`'s `setFileTimes` |
 | `patch_windows_csprng.py` | windows | uses `BCryptGenRandom` for the client challenge, salt and nonce |
 | `patch_windows_headers.py` | windows | builds with llvm-mingw's headers |
 | `patch_windows_sockets.py` | windows | keeps 64-bit socket handles whole |
+
+Links to directories: `unlink` opens the link itself (`FILE_OPEN_REPARSE_POINT`) and now asks for a non-directory, so on Windows a directory junction or directory symlink is no longer removed by `unlink`, which fails with `STATUS_FILE_IS_A_DIRECTORY`: remove it with `rmdir`, which removes the link and leaves its target alone. Samba follows symlinks on the server and libsmb2 does not negotiate the SMB3 POSIX extensions, so a Samba symlink to a directory cannot be removed over SMB2 at all (`unlink` fails as above, `rmdir` with `STATUS_DIRECTORY_NOT_EMPTY` or `STATUS_NOT_A_DIRECTORY`); a symlink to a file is still removed by `unlink`.
 
 #### 5.2 Bumping upstream libsmb2
 
@@ -279,6 +285,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 - **"libsmb2 tarball SHA-256 mismatch"**: the cached download is stale or corrupt. Delete `sources/cache/` and build again.
 - **A patch fails with "anchor not found"**: upstream moved under the patch after a bump. Update the anchor in the named `patch_*.py`.
 - **"Android NDK 28.2.13676358 not found"** or **"the build is pinned to"**: install that NDK with the SDK Manager, set `NDK_HOME`, or build with `ALLOW_ANY_NDK=1`.
+- **"N of the 9 release assets"** from the manifest: `release_builds/` lacks some libraries. Build them, take the CI artifact, or use `ALLOW_PARTIAL=1` for a manifest that is not a release.
 
 ---
 

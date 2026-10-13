@@ -5,27 +5,29 @@
 - `src/smb2_wrapper.c`, unused since dart_smb2 0.1.0, is gone; each binary exports libsmb2's public API only.
 
 ### Added
-- `.github/workflows/build.yml`: every push to a `release/` branch builds all nine binaries on GitHub's runners, Apple included (on `macos-26`), and verifies them on x86_64 and arm64. Its actions are pinned by commit SHA, on Node 24, and every job has a timeout.
-- `manifest.json` and `SHA256SUMS` with every build (`./build manifest`).
+- `.github/workflows/build.yml`: every push to a `release/` branch builds all nine binaries on GitHub's runners, Apple included (on `macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), and verifies them on x86_64 and arm64. Its actions are pinned by commit SHA, on Node 24, and every job has a timeout.
+- `manifest.json` and `SHA256SUMS` (`./build manifest`), written only when `release_builds/` holds exactly the nine binaries (`ALLOW_PARTIAL=1` writes one for a subset, with a warning).
 - libsmb2's `COPYING` and `LICENCE-LGPL-2.1.txt` in `licenses/libsmb2/` and in every release: beside the binaries, listed in `SHA256SUMS` and under the `licenses` key of `manifest.json` (`assets` lists the binaries only), and inside both xcframework zips under `licenses/libsmb2/`. `verify` checks them.
-- `patch_active_contexts_lock.py`: a lock around libsmb2's global context list, which dart_smb2's worker isolates change from several threads; `smb2_context_active()` takes it too.
+- `patch_active_contexts_lock.py`: a lock around libsmb2's global context list, which dart_smb2's worker isolates change from several threads; `smb2_context_active()` takes it too, and so does the seed counter of `smb2_init_context()`, which ThreadSanitizer reported.
 - `patch_rmdir_disposition.py`: `rmdir` fails with `STATUS_DIRECTORY_NOT_EMPTY` on a directory with entries and with `STATUS_NOT_A_DIRECTORY` on a file, instead of returning success and keeping the directory, or deleting the file.
-- `patch_unlink_non_directory.py`: `unlink` on a directory fails with `STATUS_FILE_IS_A_DIRECTORY` (`-EPERM`) instead of deleting an empty one and returning success on one with entries.
-- `patch_compound_callbacks.py`: a compound that times out or is dropped by `smb2_destroy_context()` before it is sent calls every PDU's callback, not the first only, so rmdir and unlink (and mkdir, stat, truncate, rename) report the timeout once and free their data, and the synchronous calls return `-ETIMEDOUT` instead of polling forever.
+- `patch_unlink_non_directory.py`: `unlink` on a directory fails with `STATUS_FILE_IS_A_DIRECTORY` (`-EPERM`) instead of deleting an empty one and returning success on one with entries. So does a link to a directory: on Windows a directory junction or symlink is now removed with `rmdir` (which removes the link, not its target), and a Samba symlink to a directory cannot be removed over SMB2 at all, since Samba follows it and libsmb2 does not negotiate the POSIX extensions. A symlink to a file is still removed.
+- `patch_truncate_non_directory.py`: `truncate` on a directory fails with `STATUS_FILE_IS_A_DIRECTORY` instead of returning success and changing nothing.
+- `patch_compound_callbacks.py`: a compound that times out or is dropped by `smb2_destroy_context()` before it is sent calls every PDU's callback, not the first only, so rmdir and unlink (and mkdir, stat, fstat, truncate, rename) report the timeout once and free their data, and the synchronous calls return `-ETIMEDOUT` instead of polling forever. `fstat`'s second callback, which read the reply before checking the status, now checks for one first: with the reply NULL on those paths, it was a NULL dereference (an ASan build crashed).
+- `patch_create_data_leaks.py`: `unlink`, `mkdir` and `ftruncate` free their call data when their first request cannot be built (out of memory, or a path that is not valid UTF-8).
 
 ### Changed
 - libsmb2 is upstream master of 11-10-2026 (e94eee9). Binaries: `libsmb2-r9`.
 - `patch_nterror_reporting.py` also records the NT status of rename / link and echo failures, and the timeout sweep records `SMB2_STATUS_IO_TIMEOUT`, so a failure never reports the status of an earlier one.
-- `verify` checks all nine binaries: exported symbols (`verify/symbols.txt`), machine, glibc floor, stripped Linux and Android libraries, Android alignment and dependencies, Windows imports, Apple slices and minimum OS, and the licence texts and `SHA256SUMS` of a release. It runs in its own Docker image.
+- `verify` checks all nine binaries: exported symbols (`verify/symbols.txt`), machine, glibc floor, stripped libraries on every platform, Android alignment and dependencies, Windows imports, Apple slices and minimum OS, and the licence texts and `SHA256SUMS` of a release. It runs in its own Docker image.
 - Docker has one stage per job, base images pinned by digest, llvm-mingw by SHA-256 and the Linux and Verify stages' apt packages at exact versions (the Windows stage's helper packages stay unpinned, and the Dockerfile says why); images are tagged with a hash of the Dockerfile and rebuilt when it changes, and containers run as the calling user.
 - Linux builds on Ubuntu 20.04: the libraries reference no glibc symbol newer than `GLIBC_2.25` and are verified on 2.31, the floor `verify` enforces (r8 needed 2.38).
-- The Linux and Android libraries are stripped; the exported API stays in `.dynsym`.
+- Every library is stripped: Linux and Android keep only `.dynsym`, the Windows DLLs lose the static runtime's DWARF and their COFF symbol table (their export table stays), and the Apple frameworks link with `-Wl,-x`, which drops the local symbols as `strip -x` does.
 - Windows builds both architectures with llvm-mingw and without a PE timestamp; with `LC_ALL=C` link order, Linux, Android and Windows builds are byte for byte reproducible.
 - Android requires the pinned NDK unless `ALLOW_ANY_NDK=1`, and links libc only. Apple targets iOS 13.0 and macOS 10.15 and uses CommonCrypto for AES.
-- `./build all` builds what this host can and skips the rest with a line saying why; a target named explicitly still fails.
+- `./build all` builds what this host can and skips the rest with a line saying why (Android too, when the pinned NDK is missing); it writes the manifest only when nothing was skipped. A target named explicitly that cannot run still fails, and so does a group named explicitly none of whose targets can.
 - `JOBS` applies to every platform, and a failed compile stops the build.
 - `export_sources.sh` points at dart_smb2's `tool/ffigen.dart` and `tool/bindings_drift.dart`.
-- Each patch script states that its code is added to libsmb2 under the LGPL-2.1.
+- Each patch script states that its code is added to libsmb2 under the LGPL-2.1. The patches apply in any order with the same result; `patch_compound_callbacks.py` no longer needs to run before `patch_nterror_reporting.py`.
 
 ### Fixed
 - `patch_windows_sockets.py` no longer widens `maxfd` in the server loop, which broke the build against upstream's new `extra_fdset` hook.
