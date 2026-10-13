@@ -7,10 +7,10 @@
 # export_sources.sh
 #
 # Materializes the pinned + patched libsmb2 tree at a stable path so tooling
-# outside the build can read its headers. dart_smb2's ffigen.yaml points here:
-# the bindings MUST be generated from the patched headers, because the shared
-# patches add public API (patch_utimes.py adds smb2_utimes/smb2_utimes_async
-# to include/smb2/libsmb2.h) that upstream does not have.
+# outside the build can read its headers. dart_smb2's tool/ffigen.dart reads
+# it: the bindings MUST be generated from the patched headers, because the
+# shared patches add public API (patch_utimes.py adds smb2_utimes /
+# smb2_utimes_async to include/smb2/libsmb2.h) that upstream does not have.
 #
 # Only the shared patches are applied — no platform overlay. The overlays are
 # compile fixes for one toolchain (see patches/libsmb2/windows/), not ABI
@@ -39,5 +39,5 @@ echo ""
 echo "Patched sources at: $SMB2_SRC"
 echo "libsmb2 pin:        ${LIBSMB2_COMMIT:0:12} (${LIBSMB2_VERSION})"
 echo ""
-echo "Regenerate the Dart bindings with:"
-echo "  cd ../dart_smb2 && dart run ffigen --config ffigen.yaml"
+echo "Regenerate the Dart bindings, then check them against the release, with:"
+echo "  cd ../dart_smb2 && dart run tool/ffigen.dart && dart run tool/bindings_drift.dart"
