@@ -150,3 +150,11 @@ write_export_lists() {
   { echo "EXPORTS"; sed -e '/^[[:space:]]*$/d' -e 's/^/    /' "$syms"; } > "$dir/exports.def"
   sed -e '/^[[:space:]]*$/d' -e 's/^/_/' "$syms" > "$dir/exports.txt"
 }
+
+# add_licenses_to_zip <zip>
+# Adds licenses/libsmb2/ (libsmb2's COPYING and the LGPL-2.1 text) to an
+# xcframework zip, beside libsmb2.xcframework, so the archive carries the
+# licence of the binaries it holds.
+add_licenses_to_zip() {
+  (cd "$LIBSMB2_SCRIPTS_ROOT" && zip -r -X -q "$1" licenses/libsmb2)
+}

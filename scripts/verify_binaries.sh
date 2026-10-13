@@ -11,7 +11,9 @@
 # locally through `./build verify` and in CI.
 #
 #   all       the nine release assets are present, and each exports every
-#             symbol in verify/symbols.txt
+#             symbol in verify/symbols.txt; libsmb2's licence texts
+#             (COPYING, LICENCE-LGPL-2.1.txt) are present and match
+#             licenses/libsmb2/; SHA256SUMS, when written, matches the files
 #   Linux     ELF machine per arch; no glibc symbol newer than 2.31; the
 #             host-arch library is dlopened on this glibc 2.31 system, its
 #             symbols resolved and a context created and destroyed
@@ -22,7 +24,8 @@
 #   Apple     slices per xcframework; LC_BUILD_VERSION minimum OS within the
 #             floor (iOS 13.0, macOS 10.15; arm64-only slices are raised to
 #             what that arch requires: simulator 14.0, macOS 11.0); the macOS
-#             framework keeps its Versions/Current symlinks
+#             framework keeps its Versions/Current symlinks; each zip holds
+#             licenses/libsmb2/
 #
 # Usage (from the repo root): scripts/verify_binaries.sh
 # RELEASE_DIR overrides the directory it reads.
@@ -35,7 +38,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RELEASE_DIR="${RELEASE_DIR:-$ROOT/release_builds}"
 SYMBOLS="$ROOT/verify/symbols.txt"
 
-for tool in readelf objdump llvm-objdump llvm-nm llvm-lipo unzip cc; do
+for tool in readelf objdump llvm-objdump llvm-nm llvm-lipo unzip cc cmp sha256sum; do
   command -v "$tool" >/dev/null || {
     echo "verify: $tool not found — run inside the docker/Dockerfile verify stage (./build verify)." >&2
     exit 1
@@ -68,15 +71,45 @@ elf_machine() { readelf -hW "$1" | sed -n 's/^ *Machine: *//p'; }
 # version_le A B — A <= B for dotted versions
 version_le() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
 
+# asset <name>: sets f to the asset's path, or counts the failure and
+# returns 1 when it is missing. Not called in $(...), so the count stays in
+# this shell.
 asset() {
-  local f="$RELEASE_DIR/$1"
-  if [ -f "$f" ]; then echo "$f"; else fail "$1: not found in $RELEASE_DIR"; echo ""; fi
+  f="$RELEASE_DIR/$1"
+  [ -f "$f" ] && return 0
+  fail "$1: not found in $RELEASE_DIR"
+  return 1
 }
+
+# check_licenses <label> <dir holding COPYING and LICENCE-LGPL-2.1.txt>
+check_licenses() {
+  local label="$1" dir="$2" f bad=0
+  for f in COPYING LICENCE-LGPL-2.1.txt; do
+    if [ ! -f "$dir/$f" ]; then
+      fail "$label: $f not found"; bad=1
+    elif ! cmp -s "$dir/$f" "$ROOT/licenses/libsmb2/$f"; then
+      fail "$label: $f differs from licenses/libsmb2/$f"; bad=1
+    fi
+  done
+  [ "$bad" -eq 1 ] || ok "$label: COPYING and LICENCE-LGPL-2.1.txt"
+}
+
+# ── Licences and checksums ───────────────────────────────────────────────────
+check_licenses "release" "$RELEASE_DIR"
+if [ -f "$RELEASE_DIR/SHA256SUMS" ]; then
+  if (cd "$RELEASE_DIR" && sha256sum --quiet -c SHA256SUMS); then
+    ok "SHA256SUMS: $(wc -l < "$RELEASE_DIR/SHA256SUMS") files match"
+  else
+    fail "SHA256SUMS does not match the files (rerun ./build manifest)"
+  fi
+else
+  echo "SKIP SHA256SUMS: not written yet (./build manifest)"
+fi
 
 # ── Linux ────────────────────────────────────────────────────────────────────
 for arch in x86_64 aarch64; do
   name="libsmb2_linux-$arch.so"
-  f="$(asset "$name")"; [ -n "$f" ] || continue
+  asset "$name" || continue
   case "$arch:$(elf_machine "$f")" in
     x86_64:*X86-64*|aarch64:*AArch64*) ;;
     *) fail "$name: wrong ELF machine ($(elf_machine "$f"))" ;;
@@ -99,7 +132,7 @@ done
 # ── Android ──────────────────────────────────────────────────────────────────
 for abi in arm64-v8a armeabi-v7a x86_64; do
   name="libsmb2_android-$abi.so"
-  f="$(asset "$name")"; [ -n "$f" ] || continue
+  asset "$name" || continue
   machine="$(elf_machine "$f")"
   case "$abi:$machine" in
     arm64-v8a:*AArch64*|armeabi-v7a:ARM|x86_64:*X86-64*) ;;
@@ -127,7 +160,7 @@ done
 # ── Windows ──────────────────────────────────────────────────────────────────
 for arch in x86_64 arm64; do
   name="libsmb2_windows-$arch.dll"
-  f="$(asset "$name")"; [ -n "$f" ] || continue
+  asset "$name" || continue
   format="$(llvm-objdump -f "$f" | sed -n 's/.*file format //p' | tr '[:upper:]' '[:lower:]')"
   case "$arch:$format" in
     x86_64:coff-x86-64|arm64:coff-arm64) ;;
@@ -165,17 +198,17 @@ check_slice() {
   done
 }
 
-f="$(asset libsmb2_ios.xcframework.zip)"
-if [ -n "$f" ]; then
+if asset libsmb2_ios.xcframework.zip; then
   rm -rf "$WORK/ios" && unzip -q "$f" -d "$WORK/ios"
+  check_licenses "libsmb2_ios.xcframework.zip" "$WORK/ios/licenses/libsmb2"
   xc="$WORK/ios/libsmb2.xcframework"
   check_slice "ios-arm64" "$xc/ios-arm64/libsmb2.framework/libsmb2" "arm64 " 13.0 13.0
   check_slice "ios-simulator" "$xc/ios-arm64_x86_64-simulator/libsmb2.framework/libsmb2" "arm64 x86_64 " 13.0 14.0
 fi
 
-f="$(asset libsmb2_macos.xcframework.zip)"
-if [ -n "$f" ]; then
+if asset libsmb2_macos.xcframework.zip; then
   rm -rf "$WORK/macos" && unzip -q "$f" -d "$WORK/macos"
+  check_licenses "libsmb2_macos.xcframework.zip" "$WORK/macos/licenses/libsmb2"
   fw="$WORK/macos/libsmb2.xcframework/macos-arm64_x86_64/libsmb2.framework"
   if [ -L "$fw/Versions/Current" ] && [ -L "$fw/libsmb2" ]; then
     ok "macos: framework symlinks preserved"

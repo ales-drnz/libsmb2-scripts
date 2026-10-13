@@ -6,8 +6,10 @@
 # =============================================================================
 # write_manifest.sh
 #
-# Writes release_builds/manifest.json and release_builds/SHA256SUMS, published
-# with the binaries on the libsmb2-<release> GitHub release. The manifest
+# Writes release_builds/manifest.json and release_builds/SHA256SUMS, and
+# copies libsmb2's licence texts (licenses/libsmb2/COPYING and
+# LICENCE-LGPL-2.1.txt) beside them; all of it is published with the
+# binaries on the libsmb2-<release> GitHub release. The manifest
 # states what the release contains, so consumers never re-derive it from this
 # repo's scripts:
 #
@@ -20,9 +22,12 @@
 #   symbols   the functions every binary is verified to export
 #             (verify/symbols.txt)
 #   assets    SHA-256 of every binary, keyed by file name
+#   licenses  SHA-256 of the licence texts, keyed by file name
 #
-# dart_smb2's tool/update_libsmb2.sh copies the asset hashes into its build
-# hook.
+# SHA256SUMS lists the binaries and the licence texts. dart_smb2's
+# tool/update_libsmb2.sh copies the asset hashes into its build hook, and
+# tool/bindings_drift.dart wants every entry of `assets` pinned there: the
+# licence texts stay out of `assets`, which keeps its pre-r10 meaning.
 #
 # Usage (from the repo root): scripts/write_manifest.sh
 # RELEASE_DIR overrides the directory it reads and writes; SOURCE_COMMIT
@@ -37,6 +42,10 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RELEASE_DIR="${RELEASE_DIR:-$ROOT/release_builds}"
 [ -d "$RELEASE_DIR" ] || { echo "No release directory: $RELEASE_DIR" >&2; exit 1; }
+
+for f in COPYING LICENCE-LGPL-2.1.txt; do
+  cp "$ROOT/licenses/libsmb2/$f" "$RELEASE_DIR/$f"
+done
 
 SOURCE_COMMIT="${SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
 if [ -z "${SOURCE_COMMIT_ALLOW_DIRTY:-}" ] && [ -n "$(git -C "$ROOT" status --porcelain -- patches scripts docker 2>/dev/null)" ]; then
@@ -56,6 +65,10 @@ for f in sorted(release_dir.iterdir()):
         assets[f.name] = hashlib.sha256(f.read_bytes()).hexdigest()
 if not assets:
     raise SystemExit(f"No libsmb2_* binaries in {release_dir}")
+licenses = {
+    name: hashlib.sha256((release_dir / name).read_bytes()).hexdigest()
+    for name in ("COPYING", "LICENCE-LGPL-2.1.txt")
+}
 
 patches = {
     d.name: sorted(p.name for p in d.glob("patch_*.py"))
@@ -83,10 +96,12 @@ manifest = {
     "patches": patches,
     "symbols": symbols,
     "assets": assets,
+    "licenses": licenses,
 }
 (release_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 (release_dir / "SHA256SUMS").write_text(
-    "".join(f"{sha}  {name}\n" for name, sha in assets.items())
+    "".join(f"{sha}  {name}\n" for name, sha in {**assets, **licenses}.items())
 )
-print(f"Wrote {release_dir / 'manifest.json'} and SHA256SUMS ({len(assets)} assets)")
+print(f"Wrote {release_dir / 'manifest.json'} and SHA256SUMS "
+      f"({len(assets)} assets, {len(licenses)} licence texts)")
 PY

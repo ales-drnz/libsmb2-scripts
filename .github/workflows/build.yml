@@ -2,9 +2,9 @@ name: Build
 
 # Builds every libsmb2 binary dart_smb2 ships, on GitHub's runners (macOS
 # ones included, so no Mac is needed), collects them with manifest.json and
-# SHA256SUMS into one artifact, and checks them with verify_binaries.sh on
-# both runner architectures. Publishing the libsmb2-<release> GitHub release
-# on dart_smb2 stays a manual step.
+# SHA256SUMS and libsmb2's licence texts into one artifact, and checks them
+# with verify_binaries.sh on both runner architectures. Publishing the
+# libsmb2-<release> GitHub release on dart_smb2 stays a manual step.
 on:
   push:
     branches: ['release/**']
@@ -105,6 +105,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      # write_manifest.sh also copies licenses/libsmb2/ (COPYING and the
+      # LGPL-2.1 text) into release_builds/, so they ship with the binaries.
       - name: Assemble release_builds
         env:
           SOURCE_COMMIT: ${{ github.sha }}

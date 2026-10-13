@@ -9,7 +9,8 @@
 # Compiles libsmb2 into a dynamic libsmb2.framework for macOS (arm64 +
 # x86_64 universal), wrapped in an xcframework.
 #
-# Output: release_builds/libsmb2_macos.xcframework.zip
+# Output: release_builds/libsmb2_macos.xcframework.zip, with licenses/libsmb2/
+#         beside the xcframework
 #
 # Target: macOS 10.15+ (Flutter's floor). Needs macOS with Xcode.
 #
@@ -103,6 +104,7 @@ echo "  Zipping xcframework..."
 rm -f "$OUTPUT_DIR/libsmb2_macos.xcframework.zip"
 (cd "$OUTPUT_DIR" && zip -r -y -X -q libsmb2_macos.xcframework.zip libsmb2.xcframework)
 rm -rf "$OUTPUT_DIR/libsmb2.xcframework"
+add_licenses_to_zip "$OUTPUT_DIR/libsmb2_macos.xcframework.zip"
 
 echo ""
 echo "=== Done ==="
