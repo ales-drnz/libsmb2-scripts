@@ -164,6 +164,27 @@ func TestExpandAllWithoutTheNDKSkipsAndroid(t *testing.T) {
 	}
 }
 
+func TestExpandRejectsAnEmptyAggregateNamedExplicitly(t *testing.T) {
+	// Every member unavailable: an error, not a silent exit 0.
+	onHost(t, "linux", false)
+	_, _, err := testCtx().expand([]string{"android"})
+	if err == nil || !strings.Contains(err.Error(), "nothing in it can run") {
+		t.Fatalf("android without the NDK: err = %v, want an error", err)
+	}
+	onHost(t, "windows", true)
+	if _, _, err := testCtx().expand([]string{"android"}); err == nil {
+		t.Fatal("android on a windows host: want an error")
+	}
+	// Partly available, it skips with a line.
+	got, skipped, err := testCtx().expand([]string{"all"})
+	if err != nil {
+		t.Fatalf("all on a windows host: %v", err)
+	}
+	if len(got) == 0 || len(skipped) == 0 {
+		t.Fatalf("all on a windows host: %d targets, skipped %q", len(got), skipped)
+	}
+}
+
 func TestNDKVersionMatchesTheAndroidScript(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "scripts", "build_libsmb2_android.sh"))
 	if err != nil {

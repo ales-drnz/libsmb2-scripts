@@ -149,42 +149,56 @@ func (c *buildCtx) imageMissing(stage string) bool {
 // requested target runs in is prepended once. A target this host cannot run
 // is an error when it was asked for by name, and is left out when it comes
 // from an aggregate (`./build all` on Linux skips macOS and iOS): skipped
-// lists those, as "<key>: <reason>".
+// lists those, as "<key>: <reason>". An aggregate named explicitly that
+// leaves nothing to run (`./build android` without the NDK) is an error too;
+// `all` never is.
 func (c *buildCtx) expand(keys []string) (out []Target, skipped []string, err error) {
 	seen, skippedSeen := map[string]bool{}, map[string]bool{}
-	var walk func(key string, fromAggregate bool) error
-	walk = func(key string, fromAggregate bool) error {
+	var reasons []string // why the key being walked lost targets
+	var walk func(key string, fromAggregate bool) (int, error)
+	// walk returns how many targets under key can run on this host.
+	walk = func(key string, fromAggregate bool) (int, error) {
 		t, ok := targetByKey(key)
 		if !ok {
-			return fmt.Errorf("unknown target %q (try: ./build list)", key)
+			return 0, fmt.Errorf("unknown target %q (try: ./build list)", key)
 		}
 		if t.kind == kAggregate {
+			n := 0
 			for _, m := range t.members {
-				if err := walk(m, true); err != nil {
-					return err
+				k, err := walk(m, true)
+				if err != nil {
+					return 0, err
 				}
+				n += k
 			}
-			return nil
+			return n, nil
 		}
 		if !t.Available() {
 			if !fromAggregate {
-				return fmt.Errorf("target %q: %s", key, t.unavailReason())
+				return 0, fmt.Errorf("target %q: %s", key, t.unavailReason())
 			}
+			reasons = append(reasons, t.Key+": "+t.unavailReason())
 			if !skippedSeen[t.Key] {
 				skippedSeen[t.Key] = true
 				skipped = append(skipped, t.Key+": "+t.unavailReason())
 			}
-			return nil
+			return 0, nil
 		}
 		if !seen[t.Key] {
 			seen[t.Key] = true
 			out = append(out, t)
 		}
-		return nil
+		return 1, nil
 	}
 	for _, k := range keys {
-		if err := walk(strings.TrimSpace(k), false); err != nil {
+		k = strings.TrimSpace(k)
+		reasons = nil
+		n, err := walk(k, false)
+		if err != nil {
 			return nil, nil, err
+		}
+		if n == 0 && k != "all" {
+			return nil, nil, fmt.Errorf("target %q: nothing in it can run on this host (%s)", k, strings.Join(reasons, "; "))
 		}
 	}
 
