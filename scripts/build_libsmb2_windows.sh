@@ -17,7 +17,8 @@
 # (x86_64-w64-mingw32-clang, aarch64-w64-mingw32-clang). The DLLs link the
 # runtime statically and import only system DLLs (ws2_32, bcrypt, kernel32,
 # the UCRT api sets). They are linked without a PE timestamp, so the same
-# sources and toolchain give the same bytes.
+# sources and toolchain give the same bytes, and stripped (-s: no DWARF from
+# the static runtime, no COFF symbol table); the export table is kept.
 #
 # Usage (from the repo root): scripts/build_libsmb2_windows.sh
 #
@@ -70,6 +71,7 @@ build_arch() {
   "$cc" -shared -static -o "$build/libsmb2.dll" "$build"/*.o \
     "$BUILD_DIR/exports.def" \
     -Wl,--no-insert-timestamp \
+    -s \
     -lws2_32 \
     -lbcrypt
 

@@ -20,11 +20,13 @@
 #             and destroyed
 #   Android   ELF machine per ABI; stripped; 16 KB segment alignment on the
 #             64-bit ABIs; depends on nothing but libc / libdl / libm
-#   Windows   PE machine per arch; imports only system DLLs (kernel32,
-#             ws2_32, bcrypt, the UCRT api sets)
+#   Windows   PE machine per arch; stripped (no .debug_* section, no COFF
+#             symbol table); imports only system DLLs (kernel32, ws2_32,
+#             bcrypt, the UCRT api sets)
 #   Apple     slices per xcframework; LC_BUILD_VERSION minimum OS within the
 #             floor (iOS 13.0, macOS 10.15; arm64-only slices are raised to
-#             what that arch requires: simulator 14.0, macOS 11.0); the macOS
+#             what that arch requires: simulator 14.0, macOS 11.0); no
+#             local symbols left in any slice (strip -x); the macOS
 #             framework keeps its Versions/Current symlinks; each zip holds
 #             licenses/libsmb2/
 #
@@ -73,6 +75,33 @@ elf_machine() { readelf -hW "$1" | sed -n 's/^ *Machine: *//p'; }
 check_stripped() {
   if readelf -SW "$2" | grep -q '\.symtab'; then
     fail "$1: not stripped (.symtab present)"
+  else
+    ok "$1: stripped"
+  fi
+}
+
+# check_stripped_pe <name> <PE file>: no DWARF sections and no COFF symbol
+# table; the export table is separate and stays.
+check_stripped_pe() {
+  local debug syms
+  debug="$(llvm-objdump -h "$2" | awk '$2 ~ /^\.debug_/ {print $2}' | tr '\n' ' ')"
+  syms="$(llvm-objdump -t "$2" | grep -c '^\[' || true)"
+  if [ -n "$debug" ]; then
+    fail "$1: not stripped (sections $debug)"
+  elif [ "$syms" -ne 0 ]; then
+    fail "$1: not stripped ($syms COFF symbols)"
+  else
+    ok "$1: stripped"
+  fi
+}
+
+# check_stripped_macho <label> <Mach-O file> <arch>: no local symbols (what
+# strip -x removes); the exported and undefined ones stay.
+check_stripped_macho() {
+  local n
+  n="$(llvm-nm --arch="$3" "$2" | awk 'NF >= 2 && $(NF-1) ~ /^[a-z]$/' | wc -l)"
+  if [ "$n" -ne 0 ]; then
+    fail "$1: not stripped ($n local symbols)"
   else
     ok "$1: stripped"
   fi
@@ -178,6 +207,7 @@ for arch in x86_64 arm64; do
     x86_64:coff-x86-64|arm64:coff-arm64) ;;
     *) fail "$name: wrong PE machine ($format)" ;;
   esac
+  check_stripped_pe "$name" "$f"
   imports="$(llvm-objdump -p "$f" | sed -n 's/.*DLL Name: //p' | sort -u)"
   for dll in $imports; do
     case "$(echo "$dll" | tr '[:upper:]' '[:lower:]')" in
@@ -207,6 +237,7 @@ check_slice() {
     fi
     llvm-nm -extern-only -defined-only -arch="$a" "$bin" | awk '{print $NF}' | sed 's/^_//' > "$WORK/exports"
     check_exports "$label/$a (minos $minos)" "$WORK/exports"
+    check_stripped_macho "$label/$a" "$bin" "$a"
   done
 }
 

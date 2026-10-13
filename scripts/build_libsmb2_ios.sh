@@ -14,6 +14,10 @@
 #
 # Target: iOS 13.0+ (Flutter's floor). Needs macOS with Xcode.
 #
+# The dylibs link with -Wl,-x, which drops the local symbols as strip -x
+# does (the exported API stays); the linker signs after it, so the
+# ad-hoc signature of the arm64 slices stays valid.
+#
 # Usage (from the repo root): scripts/build_libsmb2_ios.sh
 #
 # Options (environment variables):
@@ -65,6 +69,7 @@ build_framework() {
       -install_name "@rpath/libsmb2.framework/libsmb2" \
       -compatibility_version 1 -current_version 1 \
       -Wl,-exported_symbols_list,"$BUILD_DIR/exports.txt" \
+      -Wl,-x \
       -o "$dir/libsmb2" "$dir"/*.o
     dylibs+=("$dir/libsmb2")
   done
