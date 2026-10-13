@@ -13,7 +13,8 @@ STATUS_OBJECT_NAME_NOT_FOUND).
 
 Adds smb2_set_nterror() at the failure sites upstream missed:
   - the generic open/create callback ("Create failed with status ...")
-  - smb2_stat_async CREATE failure and compound-status failure
+  - smb2_fstat_async failure (fstat_cb_1) and smb2_stat_async
+    compound-status failure
   - smb2_truncate_async compound-status failure
   - smb2_rename_async / smb2_link_async compound-status failure
   - smb2_echo_async failure
@@ -21,6 +22,10 @@ Adds smb2_set_nterror() at the failure sites upstream missed:
     before it calls a timed-out request's callback, so a timeout that no
     callback reports itself (echo, read, write, ...) no longer leaves the
     status of an earlier failure behind
+
+patch_compound_callbacks.py edits the same places (the outqueue branch of
+smb2_timeout_pdus() and fstat_cb_1); both anchor so that they apply in
+either order.
 
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
