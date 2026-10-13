@@ -25,6 +25,7 @@ smb2_get_max_write_size
 smb2_get_error
 smb2_get_nterror
 nterror_to_errno
+nterror_to_str
 
 # Directories
 smb2_opendir
