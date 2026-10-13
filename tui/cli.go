@@ -24,10 +24,13 @@ func runCLI(args []string, ctx *buildCtx) int {
 		printUsage()
 		return 1
 	}
-	targets, err := ctx.expand(keys)
+	targets, skipped, err := ctx.expand(keys)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
+	}
+	for _, s := range skipped {
+		fmt.Printf("\x1b[2m- skip %s\x1b[0m\n", s)
 	}
 	for _, t := range targets {
 		fmt.Printf("\n\x1b[1;36m▶ %s\x1b[0m\n", t.fullLabel())
@@ -58,7 +61,7 @@ EXAMPLES
   ./build                          # open the dashboard
   ./build linux windows            # desktop builds (Docker)
   ./build macos verify             # build macOS, then verify everything built
-  ./build all manifest             # everything this host can build + manifest
+  ./build all                      # everything this host can build, then the manifest
 
 KNOBS (env, forwarded into Docker builds)
   JOBS=N  KEEP_BUILD=1  FORCE_DOWNLOAD=1

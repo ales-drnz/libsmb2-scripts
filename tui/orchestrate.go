@@ -146,26 +146,35 @@ func (c *buildCtx) imageMissing(stage string) bool {
 
 // expand resolves keys → concrete targets: aggregates flatten (depth-first,
 // deduped), and the docker-image-<stage> step of every missing image a
-// requested target runs in is prepended once.
-func (c *buildCtx) expand(keys []string) ([]Target, error) {
-	seen := map[string]bool{}
-	var out []Target
-	var walk func(key string) error
-	walk = func(key string) error {
+// requested target runs in is prepended once. A target this host cannot run
+// is an error when it was asked for by name, and is left out when it comes
+// from an aggregate (`./build all` on Linux skips macOS and iOS): skipped
+// lists those, as "<key>: <reason>".
+func (c *buildCtx) expand(keys []string) (out []Target, skipped []string, err error) {
+	seen, skippedSeen := map[string]bool{}, map[string]bool{}
+	var walk func(key string, fromAggregate bool) error
+	walk = func(key string, fromAggregate bool) error {
 		t, ok := targetByKey(key)
 		if !ok {
 			return fmt.Errorf("unknown target %q (try: ./build list)", key)
 		}
 		if t.kind == kAggregate {
 			for _, m := range t.members {
-				if err := walk(m); err != nil {
+				if err := walk(m, true); err != nil {
 					return err
 				}
 			}
 			return nil
 		}
 		if !t.Available() {
-			return fmt.Errorf("target %q: %s", key, t.unavailReason())
+			if !fromAggregate {
+				return fmt.Errorf("target %q: %s", key, t.unavailReason())
+			}
+			if !skippedSeen[t.Key] {
+				skippedSeen[t.Key] = true
+				skipped = append(skipped, t.Key+": "+t.unavailReason())
+			}
+			return nil
 		}
 		if !seen[t.Key] {
 			seen[t.Key] = true
@@ -174,8 +183,8 @@ func (c *buildCtx) expand(keys []string) ([]Target, error) {
 		return nil
 	}
 	for _, k := range keys {
-		if err := walk(strings.TrimSpace(k)); err != nil {
-			return nil, err
+		if err := walk(strings.TrimSpace(k), false); err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -193,5 +202,5 @@ func (c *buildCtx) expand(keys []string) ([]Target, error) {
 		images = append(images, img)
 	}
 	out = append(images, out...)
-	return out, nil
+	return out, skipped, nil
 }

@@ -780,8 +780,8 @@ func (m *model) startKeys(keys []string) tea.Cmd {
 	if len(keys) == 0 {
 		return nil
 	}
-	queue, err := m.ctx.expand(keys)
-	if err != nil {
+	queue, _, err := m.ctx.expand(keys)
+	if err != nil || len(queue) == 0 {
 		return nil
 	}
 	m.run = nil

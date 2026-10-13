@@ -11,7 +11,7 @@ func testCtx() *buildCtx {
 }
 
 func TestExpandUnknownTarget(t *testing.T) {
-	if _, err := testCtx().expand([]string{"nope"}); err == nil {
+	if _, _, err := testCtx().expand([]string{"nope"}); err == nil {
 		t.Fatal("expected an error for an unknown target")
 	}
 }
@@ -23,7 +23,7 @@ func TestExpandFlattensAggregates(t *testing.T) {
 	hostOS = "linux"
 	defer func() { hostOS = prevOS }()
 
-	got, err := testCtx().expand([]string{"android"})
+	got, _, err := testCtx().expand([]string{"android"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestExpandDeduplicates(t *testing.T) {
 	hostOS = "linux"
 	defer func() { hostOS = prevOS }()
 
-	got, err := testCtx().expand([]string{"android-x86_64", "android-x86_64"})
+	got, _, err := testCtx().expand([]string{"android-x86_64", "android-x86_64"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestExpandRejectsUnavailable(t *testing.T) {
 	hostOS = "linux"
 	defer func() { hostOS = prevOS }()
 
-	if _, err := testCtx().expand([]string{"macos"}); err == nil {
+	if _, _, err := testCtx().expand([]string{"macos"}); err == nil {
 		t.Fatal("expected an error: macos target on a linux host")
 	}
 }
@@ -69,5 +69,48 @@ func TestEveryAggregateMemberExists(t *testing.T) {
 				t.Errorf("aggregate %q references unknown member %q", tg.Key, mkey)
 			}
 		}
+	}
+}
+
+func TestExpandSkipsUnavailableAggregateMembers(t *testing.T) {
+	// `./build all` on Linux: macOS and iOS are left out with a reason,
+	// everything else (Android, Linux, Windows, the manifest) still runs.
+	prevOS := hostOS
+	hostOS = "linux"
+	defer func() { hostOS = prevOS }()
+
+	got, skipped, err := testCtx().expand([]string{"android", "all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSkipped := []string{"macos: needs macOS + Xcode", "ios: needs macOS + Xcode"}
+	if len(skipped) != len(wantSkipped) {
+		t.Fatalf("skipped %q, want %q", skipped, wantSkipped)
+	}
+	for i := range wantSkipped {
+		if skipped[i] != wantSkipped[i] {
+			t.Errorf("skipped[%d] = %q, want %q", i, skipped[i], wantSkipped[i])
+		}
+	}
+	keys := map[string]bool{}
+	for _, tg := range got {
+		keys[tg.Key] = true
+	}
+	for _, k := range []string{"android-arm64-v8a", "linux-x86_64", "windows-arm64", "manifest"} {
+		if !keys[k] {
+			t.Errorf("%s missing from the expansion of all", k)
+		}
+	}
+	if keys["macos"] || keys["ios"] {
+		t.Error("an Apple target was kept on a linux host")
+	}
+	if got[len(got)-1].Key != "manifest" {
+		t.Errorf("last target = %q, want manifest", got[len(got)-1].Key)
+	}
+
+	// Named explicitly, an unavailable target still fails, even after an
+	// aggregate skipped it.
+	if _, _, err := testCtx().expand([]string{"all", "macos"}); err == nil {
+		t.Fatal("expected an error: macos named on a linux host")
 	}
 }
