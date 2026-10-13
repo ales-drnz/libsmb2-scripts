@@ -6,7 +6,7 @@
 
 ### Added
 - `.github/workflows/build.yml`: every push to a `release/` branch builds all nine binaries on GitHub's runners, Apple included (on `macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), and verifies them on x86_64 and arm64. Its actions are pinned by commit SHA, on Node 24, and every job has a timeout.
-- `manifest.json` and `SHA256SUMS` (`./build manifest`), written only when `release_builds/` holds exactly the nine binaries (`ALLOW_PARTIAL=1` writes one for a subset, with a warning).
+- `manifest.json` and `SHA256SUMS` (`./build manifest`), written only when `release_builds/` holds exactly the nine binaries (`ALLOW_PARTIAL=1` writes one for a subset, with a warning); a refused set also removes the manifest of an earlier build.
 - libsmb2's `COPYING` and `LICENCE-LGPL-2.1.txt` in `licenses/libsmb2/` and in every release: beside the binaries, listed in `SHA256SUMS` and under the `licenses` key of `manifest.json` (`assets` lists the binaries only), and inside both xcframework zips under `licenses/libsmb2/`. `verify` checks them.
 - `patch_active_contexts_lock.py`: a lock around libsmb2's global context list, which dart_smb2's worker isolates change from several threads; `smb2_context_active()` takes it too, and so does the seed counter of `smb2_init_context()`, which ThreadSanitizer reported.
 - `patch_rmdir_disposition.py`: `rmdir` fails with `STATUS_DIRECTORY_NOT_EMPTY` on a directory with entries and with `STATUS_NOT_A_DIRECTORY` on a file, instead of returning success and keeping the directory, or deleting the file.

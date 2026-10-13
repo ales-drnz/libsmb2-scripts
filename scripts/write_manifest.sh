@@ -86,13 +86,23 @@ found = sorted(
 )
 unexpected = [n for n in found if n not in EXPECTED]
 missing = [n for n in EXPECTED if n not in found]
+
+
+def refuse(message):
+    # A manifest left from an earlier build would no longer match these
+    # files: remove it rather than let it pass for this build's.
+    for stale in ("manifest.json", "SHA256SUMS"):
+        (release_dir / stale).unlink(missing_ok=True)
+    raise SystemExit(message)
+
+
 if unexpected:
-    raise SystemExit(f"Unexpected files in {release_dir}: {', '.join(unexpected)}")
+    refuse(f"Unexpected files in {release_dir}: {', '.join(unexpected)}")
 if not found:
-    raise SystemExit(f"No libsmb2_* binaries in {release_dir}")
+    refuse(f"No libsmb2_* binaries in {release_dir}")
 if missing:
     if os.environ["ALLOW_PARTIAL"] != "1":
-        raise SystemExit(
+        refuse(
             f"{len(found)} of the {len(EXPECTED)} release assets in {release_dir}; "
             f"missing: {', '.join(missing)}.\n"
             "Build them (CI builds all nine), or set ALLOW_PARTIAL=1 for a "
