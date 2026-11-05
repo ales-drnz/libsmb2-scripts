@@ -233,9 +233,9 @@ hooks:
 #### 4.4 Publishing a release
 
 1. Build all nine libraries, usually by pushing a `release/` branch (see [3.5](#35-on-github-actions)).
-2. Tag the commit `libsmb2-rN` in this repository.
-3. Create the `libsmb2-rN` release on `dart_smb2` and upload the libraries, `COPYING`, `LICENCE-LGPL-2.1.txt`, `manifest.json` and `SHA256SUMS`, naming this repository's commit in its notes.
-4. In `dart_smb2`, run `tool/update_libsmb2.sh rN`.
+2. In `dart_smb2`, run `tool/update_libsmb2.sh rN path/to/manifest.json` with the manifest of that Build, and push its own `release/` branch. While `libsmb2-rN` is not published, its CI finds the latest successful Build of rN by itself and tests its libraries (it needs the secret `LIBSMB2_SCRIPTS_TOKEN`; see `dart_smb2`'s `.github/workflows/ci.yml`).
+3. Tag the commit `libsmb2-rN` in this repository.
+4. Create the `libsmb2-rN` release on `dart_smb2` and upload the libraries, `COPYING`, `LICENCE-LGPL-2.1.txt`, `manifest.json` and `SHA256SUMS`, naming this repository's commit in its notes. From then on `dart_smb2`'s CI takes the published release.
 
 ---
 
