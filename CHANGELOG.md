@@ -1,22 +1,18 @@
 ## [0.2.5] - 5-11-2026
 
-### Fixed
-- A logon with a password and no user no longer reads out of bounds in NTLMv2 on 32-bit targets (upstream 2832fb4).
-- The NTLM AUTHENTICATE no longer carries uninitialised heap (upstream 3f62685).
-- A PDU on a sealed session is never sent in the clear (upstream bd10fea, b78e01f).
-- A READ reply longer than requested, or a reply for another command, is refused, and the decoders keep payloads within the PDU (upstream 6cd18a5, e50ff7e, 3c7bd04, 4c5d08d).
+### All platforms
+**Changed**
+- libsmb2 is upstream master of 5-11-2026, which carries the context list and closed connection fixes: `patch_active_contexts_lock.py` and `patch_socket_close_guard.py` are gone.
+- The libraries are `libsmb2-r10`.
 
-### Changed
-- libsmb2 is upstream master of 5-11-2026 (4d9ce67).
-- `patch_active_contexts_lock.py` and `patch_socket_close_guard.py` are gone: upstream keeps client contexts off its context list (565460d) and stops the read loop once a callback closed the connection (e7beeb4).
-- `patch_compound_callbacks.py` covers the timeout sweep only, and `patch_nterror_reporting.py` the open callback and the timeout sweep: upstream does the rest (ee56559, b4a409e, 8fa34fd).
-- `patch_windows_sockets.py` follows upstream's move of the address loop.
+**Fixed**
+- A PDU on a sealed session is never sent in the clear.
+- A READ reply longer than requested, or a reply for another command, is refused, and the decoders keep payloads within the PDU.
+- The NTLM AUTHENTICATE no longer carries uninitialised heap.
 
-### Build
-- Updated the release to `libsmb2-r10`.
-
-### Docs
-- The README's publishing steps pin a Build in dart_smb2 before its release, whose CI then tests that Build by itself.
+### Android
+**Fixed**
+- A logon with a password and no user no longer reads out of bounds in NTLMv2 on `armeabi-v7a`.
 
 ## [0.2.0] - 13-10-2026
 
