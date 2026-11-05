@@ -1,14 +1,22 @@
 ## [0.2.5] - 5-11-2026
 
+### Fixed
+- A logon with a password and no user no longer reads out of bounds in NTLMv2 on 32-bit targets (upstream 2832fb4).
+- The NTLM AUTHENTICATE no longer carries uninitialised heap (upstream 3f62685).
+- A PDU on a sealed session is never sent in the clear (upstream bd10fea, b78e01f).
+- A READ reply longer than requested, or a reply for another command, is refused, and the decoders keep payloads within the PDU (upstream 6cd18a5, e50ff7e, 3c7bd04, 4c5d08d).
+
 ### Changed
-- libsmb2 is upstream master of 5-11-2026 (4d9ce67). Binaries: `libsmb2-r10`. On the client side it fixes an out of bounds read in NTLMv2 with an empty user on 32-bit (2832fb4), uninitialised heap in the NTLM AUTHENTICATE (3f62685), a PDU sent in the clear on a sealed session (bd10fea, b78e01f), READ replies longer than requested (6cd18a5) and replies for another command (e50ff7e), and bounds the payloads the decoders read (3c7bd04, 4c5d08d).
-- `patch_compound_callbacks.py` only covers the timeout sweep: `smb2_destroy_context()` calls every callback of an unsent compound upstream, and `fstat_cb_1` checks the status before it reads the reply.
-- `patch_nterror_reporting.py` only covers the open callback and the timeout sweep: upstream records the NT status of stat, fstat, truncate, rename and echo failures (8fa34fd).
+- libsmb2 is upstream master of 5-11-2026 (4d9ce67).
+- `patch_active_contexts_lock.py` and `patch_socket_close_guard.py` are gone: upstream keeps client contexts off its context list (565460d) and stops the read loop once a callback closed the connection (e7beeb4).
+- `patch_compound_callbacks.py` covers the timeout sweep only, and `patch_nterror_reporting.py` the open callback and the timeout sweep: upstream does the rest (ee56559, b4a409e, 8fa34fd).
 - `patch_windows_sockets.py` follows upstream's move of the address loop.
 
-### Removed
-- `patch_active_contexts_lock.py`: client contexts stay off libsmb2's context list upstream (565460d), so threads creating them no longer share it.
-- `patch_socket_close_guard.py`: upstream stops the read loop once a callback closed the connection (e7beeb4).
+### Build
+- Updated the release to `libsmb2-r10`.
+
+### Docs
+- The README's publishing steps pin a Build in dart_smb2 before its release, whose CI then tests that Build by itself.
 
 ## [0.2.0] - 13-10-2026
 
