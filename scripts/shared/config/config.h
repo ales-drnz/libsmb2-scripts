@@ -20,7 +20,7 @@
 /* #undef HAVE_GSSAPI_GSSAPI_H */
 /* #undef HAVE_DCERPC_FULL */          /* full DCE/RPC stays in libdcerpc */
 #define PACKAGE "libsmb2"
-/* configure.ac of the pinned commit says 7.0.0 (git describe: 6.2-407). */
+/* configure.ac of the pinned commit says 7.0.0 (git describe: 6.2-596). */
 #define PACKAGE_VERSION "7.0.0"
 #define VERSION "7.0.0"
 #if defined(__APPLE__)

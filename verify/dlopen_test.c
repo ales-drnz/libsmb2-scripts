@@ -9,8 +9,8 @@
  * Loads the library the way dart_smb2 does (RTLD_NOW | RTLD_LOCAL), resolves
  * every symbol listed in symbols.txt (one per line; blank lines and lines
  * starting with '#' are skipped), then creates and destroys a libsmb2
- * context, which runs the patched active_contexts lock on this platform's
- * libc. Exits non-zero on any failure.
+ * context, which runs libsmb2's initialisation (login name, random seed) on
+ * this platform's libc. Exits non-zero on any failure.
  */
 #include <dlfcn.h>
 #include <stdio.h>

@@ -57,10 +57,10 @@ patch("lib/socket.c", [
         "        *fd_out = fd;\n",
     ),
     (
-        "                int fd;\n"
-        "                err = connect_async_ai(smb2, ai, &fd);\n",
-        "                t_socket fd;\n"
-        "                err = connect_async_ai(smb2, ai, &fd);\n",
+        "        for (ai = base; ai != NULL; ai = ai->ai_next) {\n"
+        "                int fd;\n",
+        "        for (ai = base; ai != NULL; ai = ai->ai_next) {\n"
+        "                t_socket fd;\n",
     ),
 ])
 

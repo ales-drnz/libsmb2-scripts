@@ -251,13 +251,11 @@ Every patch is a Python script with a docstring that says why it exists. It find
 
 | Patch | Scope | What it does |
 | :--- | :--- | :--- |
-| `patch_active_contexts_lock.py` | shared | locks the global context list, which dart_smb2's worker isolates change from several threads, and the seed counter of `smb2_init_context()` |
-| `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out or is dropped before it is sent, so rmdir, unlink and the other path calls report it, and makes `fstat`'s second callback check for a reply first |
+| `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out before it is sent, so rmdir, unlink and the other path calls report the timeout |
 | `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir` and `ftruncate` when their first request cannot be built |
-| `patch_nterror_reporting.py` | shared | records the NT status on stat, truncate, open, rename, echo and timeout failures |
+| `patch_nterror_reporting.py` | shared | records the NT status on open and timeout failures |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
-| `patch_socket_close_guard.py` | shared | stops the read loop once a callback closed the context |
 | `patch_truncate_non_directory.py` | shared | makes `truncate` fail on a directory |
 | `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory, and so on a link to one (see below) |
 | `patch_utimes.py` | shared | adds `smb2_utimes()`, behind `dart_smb2`'s `setFileTimes` |

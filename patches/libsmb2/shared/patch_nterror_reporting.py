@@ -11,21 +11,17 @@ The dart_smb2 wrapper surfaces smb2_get_error() to Dart exceptions, which
 made these failures unreadable ("previous unrelated error" instead of e.g.
 STATUS_OBJECT_NAME_NOT_FOUND).
 
-Adds smb2_set_nterror() at the failure sites upstream missed:
-  - the generic open/create callback ("Create failed with status ...")
-  - smb2_fstat_async failure (fstat_cb_1) and smb2_stat_async
-    compound-status failure
-  - smb2_truncate_async compound-status failure
-  - smb2_rename_async / smb2_link_async compound-status failure
-  - smb2_echo_async failure
+Upstream sets it in the stat, fstat, truncate, rename and echo callbacks
+since 8fa34fd. This adds smb2_set_nterror() where it is still missing:
+  - the generic open/create callback (create_cb_1), which set only the
+    text with smb2_set_error(), so smb2_get_nterror() kept an earlier status
   - the timeout sweep (lib/pdu.c), which records SMB2_STATUS_IO_TIMEOUT
     before it calls a timed-out request's callback, so a timeout that no
     callback reports itself (echo, read, write, ...) no longer leaves the
     status of an earlier failure behind
 
-patch_compound_callbacks.py edits the same places (the outqueue branch of
-smb2_timeout_pdus() and fstat_cb_1); both anchor so that they apply in
-either order.
+patch_compound_callbacks.py edits the same place (the outqueue branch of
+smb2_timeout_pdus()); both anchor so that they apply in either order.
 
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
@@ -46,69 +42,6 @@ replacements = [
         "                smb2_set_nterror(smb2, status,\n"
         '                                 "Create failed with status %s.",\n'
         "                                 nterror_to_str(status));\n",
-    ),
-    # smb2_stat_async: CREATE failed outright.
-    (
-        "        if (status != SMB2_STATUS_SUCCESS) {\n"
-        "                stat_data->cb(smb2, -nterror_to_errno(status),\n"
-        "                       NULL, stat_data->cb_data);\n"
-        "                free(stat_data);\n"
-        "                return;\n"
-        "        }\n",
-        "        if (status != SMB2_STATUS_SUCCESS) {\n"
-        "                smb2_set_nterror(smb2, status, \"%s\",\n"
-        "                                 nterror_to_str(status));\n"
-        "                stat_data->cb(smb2, -nterror_to_errno(status),\n"
-        "                       NULL, stat_data->cb_data);\n"
-        "                free(stat_data);\n"
-        "                return;\n"
-        "        }\n",
-    ),
-    # smb2_stat_async: compound CLOSE callback with an accumulated status.
-    (
-        "        stat_data->cb(smb2, -nterror_to_errno(stat_data->status),\n",
-        "        if (stat_data->status != SMB2_STATUS_SUCCESS) {\n"
-        "                smb2_set_nterror(smb2, stat_data->status, \"%s\",\n"
-        "                                 nterror_to_str(stat_data->status));\n"
-        "        }\n"
-        "\n"
-        "        stat_data->cb(smb2, -nterror_to_errno(stat_data->status),\n",
-    ),
-    # smb2_truncate_async: compound CLOSE callback with an accumulated status.
-    (
-        "        trunc_data->cb(smb2, -nterror_to_errno(trunc_data->status),\n",
-        "        if (trunc_data->status != SMB2_STATUS_SUCCESS) {\n"
-        "                smb2_set_nterror(smb2, trunc_data->status, \"%s\",\n"
-        "                                 nterror_to_str(trunc_data->status));\n"
-        "        }\n"
-        "\n"
-        "        trunc_data->cb(smb2, -nterror_to_errno(trunc_data->status),\n",
-    ),
-]
-
-replacements += [
-    # smb2_rename_async / smb2_link_async: compound CLOSE callback.
-    (
-        "        new_name_data->cb(smb2, -nterror_to_errno(new_name_data->status),\n",
-        "        if (new_name_data->status != SMB2_STATUS_SUCCESS) {\n"
-        "                smb2_set_nterror(smb2, new_name_data->status, \"%s\",\n"
-        "                                 nterror_to_str(new_name_data->status));\n"
-        "        }\n"
-        "\n"
-        "        new_name_data->cb(smb2, -nterror_to_errno(new_name_data->status),\n",
-    ),
-    # smb2_echo_async.
-    (
-        "        struct smb2_echo_data *cb_data = private_data;\n"
-        "\n"
-        "        cb_data->cb(smb2, -nterror_to_errno(status),\n",
-        "        struct smb2_echo_data *cb_data = private_data;\n"
-        "\n"
-        "        if (status != SMB2_STATUS_SUCCESS) {\n"
-        "                smb2_set_nterror(smb2, status, \"%s\",\n"
-        "                                 nterror_to_str(status));\n"
-        "        }\n"
-        "        cb_data->cb(smb2, -nterror_to_errno(status),\n",
     ),
 ]
 
@@ -143,4 +76,4 @@ content = content.replace(old, new)
 
 with open(fn, "w") as f:
     f.write(content)
-print("Patched lib/libsmb2.c, lib/pdu.c: NT status recorded on create/stat/truncate/rename/echo failures and timeouts")
+print("Patched lib/libsmb2.c, lib/pdu.c: NT status recorded on create failures and timeouts")
