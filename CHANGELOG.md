@@ -4,7 +4,7 @@
 **Changed**
 - libsmb2 is upstream master of 7-11-2026 (a52c157). None of the local patches is upstream yet, so none is dropped.
 - Every library links OpenSSL 3.5.9's libcrypto statically, built from the pinned release tarball with only what libsmb2 uses; none of its symbols is exported. libsmb2 signs and seals through it, and SMB 3.1.1 sessions offer AES-256-GCM and AES-128-GCM ahead of AES-128-CCM.
-- The libraries are larger because of libcrypto: about 2 to 3.5 MB each instead of 0.25 MB.
+- The libraries are larger because of libcrypto: 1.3 to 3.5 MB per architecture instead of about 0.25 MB.
 - The libraries are `libsmb2-r11`.
 
 **Added**
@@ -19,7 +19,7 @@
 - A copychunk error reply is told by its size.
 - `patch_rename_replace.py` writes nothing unless every anchor matched, and leaves a tree it already patched alone.
 - The xcframework zips are reproducible: entries in byte order, every time set to `SOURCE_DATE_EPOCH`. Two builds of the same commit used to give zips that differed only in their timestamps.
-- Both tarballs are downloaded over HTTPS only, with TLS 1.2 or later and three retries.
+- Both tarballs are downloaded over HTTPS only, with TLS 1.2 or later and three retries; a failed download says so and leaves no partial file.
 - Lease and oplock breaks and their acknowledgements are encoded and decoded correctly.
 
 ### Linux
