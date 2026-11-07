@@ -18,6 +18,7 @@
 - Zero-length reads and writes no longer fail, and keep a CreditCharge of 1.
 - A copychunk error reply is told by its size.
 - `patch_rename_replace.py` writes nothing unless every anchor matched, and leaves a tree it already patched alone.
+- The xcframework zips are reproducible: entries in byte order, every time set to `SOURCE_DATE_EPOCH`. Two builds of the same commit used to give zips that differed only in their timestamps.
 - Both tarballs are downloaded over HTTPS only, with TLS 1.2 or later and three retries.
 - Lease and oplock breaks and their acknowledgements are encoded and decoded correctly.
 

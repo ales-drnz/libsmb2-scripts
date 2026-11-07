@@ -238,11 +238,30 @@ write_export_lists() {
   sed -e '/^[[:space:]]*$/d' -e 's/^/_/' "$syms" > "$dir/exports.txt"
 }
 
-# add_licenses_to_zip <zip>
-# Adds licenses/libsmb2/ (libsmb2's COPYING and the LGPL-2.1 text) and
-# licenses/openssl/ (OpenSSL's Apache-2.0 LICENSE.txt) to an xcframework
-# zip, beside libsmb2.xcframework, so the archive carries the licences of
-# the code it holds.
-add_licenses_to_zip() {
-  (cd "$LIBSMB2_SCRIPTS_ROOT" && zip -r -X -q "$1" licenses/libsmb2 licenses/openssl)
+# zip_xcframework <output dir> <zip name>
+# Zips <output dir>/libsmb2.xcframework with licenses/libsmb2/ (libsmb2's
+# COPYING and the LGPL-2.1 text) and licenses/openssl/ (OpenSSL's
+# Apache-2.0 LICENSE.txt) beside it, so the archive carries the licences of
+# the code it holds, then removes the xcframework.
+#
+# The same files give the same zip: entries in byte order, every time set
+# to SOURCE_DATE_EPOCH in UTC, no extra attributes (-X), symlinks kept as
+# links (-y). Without this the time of the build and of the checkout ends
+# up in the archive and its SHA-256 changes on every run.
+zip_xcframework() {
+  local dir="$1" name="$2"
+  local epoch="${SOURCE_DATE_EPOCH:-1767225600}" stamp
+  # BSD date reads an epoch with -r; GNU date with -d @.
+  stamp="$(TZ=UTC date -r "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
+    || TZ=UTC date -d "@$epoch" +%Y%m%d%H%M.%S)"
+  rm -rf "$dir/licenses" "$dir/$name"
+  mkdir -p "$dir/licenses"
+  cp -R "$LIBSMB2_SCRIPTS_ROOT/licenses/libsmb2" "$LIBSMB2_SCRIPTS_ROOT/licenses/openssl" "$dir/licenses/"
+  (
+    cd "$dir"
+    find libsmb2.xcframework licenses -exec env TZ=UTC touch -h -t "$stamp" {} +
+    find libsmb2.xcframework licenses | LC_ALL=C sort \
+      | TZ=UTC zip -X -y -q "$name" -@
+  )
+  rm -rf "$dir/libsmb2.xcframework" "$dir/licenses"
 }

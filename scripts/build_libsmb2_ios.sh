@@ -150,10 +150,7 @@ done
 
 echo ""
 echo "  Zipping xcframework..."
-rm -f "$OUTPUT_DIR/libsmb2_ios.xcframework.zip"
-(cd "$OUTPUT_DIR" && zip -r -X -q libsmb2_ios.xcframework.zip libsmb2.xcframework)
-rm -rf "$OUTPUT_DIR/libsmb2.xcframework"
-add_licenses_to_zip "$OUTPUT_DIR/libsmb2_ios.xcframework.zip"
+zip_xcframework "$OUTPUT_DIR" libsmb2_ios.xcframework.zip
 
 echo ""
 echo "=== Done ==="

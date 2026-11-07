@@ -120,10 +120,7 @@ xcrun lipo -info "$OUTPUT_DIR"/libsmb2.xcframework/*/libsmb2.framework/Versions/
 
 echo ""
 echo "  Zipping xcframework..."
-rm -f "$OUTPUT_DIR/libsmb2_macos.xcframework.zip"
-(cd "$OUTPUT_DIR" && zip -r -y -X -q libsmb2_macos.xcframework.zip libsmb2.xcframework)
-rm -rf "$OUTPUT_DIR/libsmb2.xcframework"
-add_licenses_to_zip "$OUTPUT_DIR/libsmb2_macos.xcframework.zip"
+zip_xcframework "$OUTPUT_DIR" libsmb2_macos.xcframework.zip
 
 echo ""
 echo "=== Done ==="
