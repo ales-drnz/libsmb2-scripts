@@ -1,47 +1,61 @@
 ## [0.3.0] - 7-11-2026
 
 ### All platforms
+**Added**
+- `patch_rename_replace.py` adds `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, for dart_smb2's `rename(..., overwrite: true)`.
+- `smb2_rename2()` ignores its other flag bits for now; a later release will refuse them with `-EINVAL`.
+- `verify` fails when a binary exports any libcrypto symbol (`EVP_`, `OSSL_`, `OPENSSL_`, `CRYPTO_`, `ERR_`, `BIO_`, ...).
+- OpenSSL's licence ships with the binaries: `LICENSE-OpenSSL.txt` beside them, in `SHA256SUMS` and under `licenses` in `manifest.json`, and `licenses/openssl/` in both xcframework zips.
+- `verify` checks that the OpenSSL licence is there.
+- `manifest.json` records the OpenSSL version and tarball hash under `openssl`, and the licence of libcrypto under `licenseNotes`. Its `assets` still lists the nine binaries only.
+- `verify/symbols.txt` lists `smb2_link`, `smb2_symlink`, `smb2_rename2` and the change notification calls.
+
 **Changed**
 - libsmb2 is upstream master of 7-11-2026 (a52c157). None of the local patches is upstream yet, so none is dropped.
-- Every library links OpenSSL 3.5.9's libcrypto statically, built from the pinned release tarball with only what libsmb2 uses; none of its symbols is exported. libsmb2 signs and seals through it, and SMB 3.1.1 sessions offer AES-256-GCM and AES-128-GCM ahead of AES-128-CCM.
-- The libraries are larger because of libcrypto: 1.3 to 3.5 MB per architecture instead of about 0.25 MB.
+- Every library links OpenSSL 3.5.9's libcrypto statically, built from the pinned release tarball with only what libsmb2 uses.
+- No libcrypto symbol is exported.
+- libsmb2 signs and seals through libcrypto.
+- SMB 3.1.1 sessions offer AES-256-GCM and AES-128-GCM ahead of AES-128-CCM.
+- The libraries are 1.3 to 3.5 MB per architecture instead of about 0.25 MB, because of libcrypto.
 - The libraries are `libsmb2-r11`.
-
-**Added**
-- `patch_rename_replace.py`: `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, for dart_smb2's `rename(..., overwrite: true)`. Other flag bits are ignored for now; a later release will refuse them with `-EINVAL`.
-- `verify` fails when a binary exports any libcrypto symbol (`EVP_`, `OSSL_`, `OPENSSL_`, `CRYPTO_`, `ERR_`, `BIO_`, ...).
-- OpenSSL's licence ships with the binaries: `LICENSE-OpenSSL.txt` beside them, in `SHA256SUMS` and under `licenses` in `manifest.json`, and `licenses/openssl/` in both xcframework zips. `verify` checks it.
-- `manifest.json` records the OpenSSL version and tarball hash (`openssl`) and the licence of libcrypto (`licenseNotes`). `assets` still lists the nine binaries only.
-- `verify/symbols.txt` lists `smb2_link`, `smb2_symlink`, `smb2_rename2` and the change notification calls.
 
 **Fixed**
 - Zero-length reads and writes no longer fail, and keep a CreditCharge of 1.
 - A copychunk error reply is told by its size.
-- `patch_rename_replace.py` writes nothing unless every anchor matched, and leaves a tree it already patched alone.
-- The xcframework zips are reproducible: entries in byte order, every time set to `SOURCE_DATE_EPOCH`, and the slices in `Info.plist` sorted, which `xcodebuild -create-xcframework` lists in no fixed order. Two builds of the same commit used to give zips that differed only in their timestamps.
-- Both tarballs are downloaded over HTTPS only, with TLS 1.2 or later and three retries; a failed download says so and leaves no partial file.
 - Lease and oplock breaks and their acknowledgements are encoded and decoded correctly.
+- `patch_rename_replace.py` writes nothing unless every anchor matched.
+- `patch_rename_replace.py` leaves a tree it already patched alone.
+- Both tarballs are downloaded over HTTPS only, with TLS 1.2 or later and three retries.
+- A failed download says so and leaves no partial file.
 
 ### Linux
 **Changed**
-- The Docker image installs perl and make for OpenSSL's `Configure`. The glibc floor is unchanged.
+- The Docker image installs perl and make for OpenSSL's `Configure`.
+- The glibc floor is unchanged.
 
 ### Android
 **Changed**
-- Building needs perl and make on the host. The libraries still depend on libc only.
+- Building needs perl and make on the host.
+- The libraries still depend on libc only.
 - A `CC`, `CFLAGS` or other tool variable exported in the shell no longer reaches OpenSSL's `Configure`.
 
 ### Windows
-**Changed**
-- The DLLs also import `user32` and `advapi32`, which libcrypto uses; `verify` allows them.
-- OpenSSL has no mingw target for arm64: its libcrypto builds with `scripts/shared/config/openssl-mingw-arm64.conf`, without assembly.
-
 **Added**
 - `config.h` defines `O_DIRECTORY`, which the UCRT lacks, so `smb2_open()` can open a directory, as dart_smb2's watches need.
 
+**Changed**
+- The DLLs also import `user32` and `advapi32`, which libcrypto uses, and `verify` allows them.
+- libcrypto for arm64 builds with `scripts/shared/config/openssl-mingw-arm64.conf`, without assembly, as OpenSSL has no mingw target for arm64.
+
 ### macOS and iOS
 **Changed**
-- Building needs perl and make, which Xcode's command line tools have. CI builds both xcframeworks on `macos-26` with Xcode 26.6, and `verify` checks them.
+- Building needs perl and make, which Xcode's command line tools have.
+- CI builds both xcframeworks on `macos-26` with Xcode 26.6, and `verify` checks them.
+
+**Fixed**
+- Two builds of the same commit give the same xcframework zips, instead of zips that differ only in their timestamps.
+- The zip entries are in byte order, with every time set to `SOURCE_DATE_EPOCH`.
+- The slices in `Info.plist` are sorted, as `xcodebuild -create-xcframework` lists them in no fixed order.
 
 ## [0.2.5] - 5-11-2026
 
