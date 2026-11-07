@@ -57,6 +57,10 @@ smb2_utimes
 # Patched in by patches/libsmb2/shared/patch_rename_replace.py
 smb2_rename2
 
+# Patched in by patches/libsmb2/shared/patch_scripts_release.py; dart_smb2
+# refuses a library whose release is not the one it pins
+smb2_scripts_release
+
 # Change notification, served by dart_smb2's own event loop
 smb2_get_fd
 smb2_which_events
