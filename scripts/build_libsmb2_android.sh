@@ -99,6 +99,11 @@ done
 # <triple><API>-clang and llvm-ar from the NDK on PATH.
 export ANDROID_NDK_ROOT="$NDK"
 export PATH="$TOOLCHAIN:$PATH"
+# Configure also reads the compiler, tools and flags from the environment:
+# drop any the caller exported, so libcrypto is built with the NDK's alone,
+# as in CI, and not with a host CC or CFLAGS.
+unset CC CXX CPP AS LD AR RANLIB CROSS_COMPILE \
+  CFLAGS CXXFLAGS CPPFLAGS ASFLAGS LDFLAGS LDLIBS ARFLAGS
 
 # ── Sources ──────────────────────────────────────────────────────────────────
 
