@@ -11,9 +11,20 @@ General Public License, version 2.1 or later:
   text.
 
 The code the patch scripts add to libsmb2 is distributed under the same
-LGPL-2.1-or-later terms. The scripts themselves, the build tooling and the TUI
-are BSD-3-Clause ([`../LICENSE`](../LICENSE)).
+LGPL-2.1-or-later terms.
+
+Every binary also links, statically, the libcrypto of the OpenSSL release
+pinned in `scripts/shared/_versions.sh` (`OPENSSL_VERSION`), built from its
+unmodified tarball. OpenSSL is licensed under the Apache License 2.0:
+
+- [`openssl/LICENSE.txt`](openssl/LICENSE.txt): the Apache-2.0 text, copied
+  from the pinned tarball. Each release ships it beside the binaries as
+  `LICENSE-OpenSSL.txt`, and the xcframework zips carry it under
+  `licenses/openssl/`.
+
+The scripts themselves, the build tooling and the TUI are BSD-3-Clause
+([`../LICENSE`](../LICENSE)).
 
 Each `libsmb2-rN` release names in its `manifest.json` the libsmb2-scripts
-commit it was built from: that commit, with the upstream tarball it pins, is
-the corresponding source of the release's binaries.
+commit it was built from: that commit, with the upstream tarballs it pins,
+is the corresponding source of the release's binaries.

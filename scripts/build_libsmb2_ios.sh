@@ -7,12 +7,16 @@
 # build_libsmb2_ios.sh
 #
 # Compiles libsmb2 into a dynamic libsmb2.framework for iOS devices (arm64)
-# and the simulator (arm64 + x86_64), wrapped in one xcframework.
+# and the simulator (arm64 + x86_64), wrapped in one xcframework, with the
+# pinned OpenSSL's libcrypto built for each slice (ios64-xcrun,
+# iossimulator-arm64-xcrun, iossimulator-x86_64-xcrun) and linked in
+# statically.
 #
 # Output: release_builds/libsmb2_ios.xcframework.zip, with licenses/libsmb2/
-#         beside the xcframework
+#         and licenses/openssl/ beside the xcframework
 #
-# Target: iOS 13.0+ (Flutter's floor). Needs macOS with Xcode.
+# Target: iOS 13.0+ (Flutter's floor). Needs macOS with Xcode, and perl and
+# make (both come with the command line tools) for OpenSSL's Configure.
 #
 # The dylibs link with -Wl,-x, which drops the local symbols as strip -x
 # does (the exported API stays); the linker signs after it, so the
@@ -24,6 +28,7 @@
 #   DEPLOYMENT_TARGET=13.0  Minimum iOS version
 #   JOBS=N                  Parallel compile jobs (default: all cores)
 #   KEEP_BUILD=1            Do not delete the intermediate build directory
+#   FORCE_DOWNLOAD=1        Redownload the libsmb2 and OpenSSL tarballs even if cached
 # =============================================================================
 
 set -euo pipefail
@@ -39,11 +44,21 @@ echo "=== libsmb2: preparing sources ==="
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 prepare_libsmb2_sources "$BUILD_DIR"
+prepare_openssl_sources "$BUILD_DIR"
 libsmb2_sources
 write_export_lists "$BUILD_DIR"
 
 echo "=== libsmb2: building libsmb2.xcframework for iOS ==="
 echo "    Sources: ${#SOURCES[@]} files"
+
+# OpenSSL's Configure target for each slice.
+openssl_target() {
+  case "$1:$2" in
+    iphoneos:arm64)         echo "ios64-xcrun" ;;
+    iphonesimulator:arm64)  echo "iossimulator-arm64-xcrun" ;;
+    iphonesimulator:x86_64) echo "iossimulator-x86_64-xcrun" ;;
+  esac
+}
 
 # build_framework <label> <sdk> <triple suffix> <arch...>
 # Compiles and links one dylib per arch, lipos them, and wraps the result in
@@ -60,17 +75,27 @@ build_framework() {
     local dir="$build/$arch"
     local target="${arch}-apple-ios${DEPLOYMENT_TARGET}${suffix}"
     rm -rf "$dir"
+    # libcrypto with the same compiler, triple and SDK as libsmb2. The
+    # triple goes in its --target= form: Configure would take a separate
+    # word for its own target name.
+    CC="xcrun clang" build_libcrypto "$BUILD_DIR/openssl-$label-$arch" \
+      "$(openssl_target "$sdk" "$arch")" --target="$target" -isysroot "$sdk_path"
+
     echo "  Compiling $label/$arch ($target)..."
-    compile_objects "$dir" xcrun clang -- -target "$target" -isysroot "$sdk_path"
+    compile_objects "$dir" xcrun clang -- -target "$target" -isysroot "$sdk_path" \
+      "${OPENSSL_INCLUDES[@]}"
 
     echo "  Linking $label/$arch..."
+    # libcrypto.a comes after the objects, so only what they use is linked;
+    # the exported symbols list keeps its symbols private.
     xcrun clang -target "$target" -isysroot "$sdk_path" \
       -dynamiclib \
       -install_name "@rpath/libsmb2.framework/libsmb2" \
       -compatibility_version 1 -current_version 1 \
       -Wl,-exported_symbols_list,"$BUILD_DIR/exports.txt" \
       -Wl,-x \
-      -o "$dir/libsmb2" "$dir"/*.o
+      -Wl,-dead_strip \
+      -o "$dir/libsmb2" "$dir"/*.o "$LIBCRYPTO"
     dylibs+=("$dir/libsmb2")
   done
 

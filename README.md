@@ -2,15 +2,15 @@
 
 #### Patched libsmb2, built for every platform.
 
-[![](https://img.shields.io/badge/libsmb2--scripts-0.2.0-7DCFFF.svg?style=for-the-badge)](CHANGELOG.md)
-[![](https://img.shields.io/badge/libsmb2-master%202026--10--11-orange.svg?style=for-the-badge)](https://github.com/sahlberg/libsmb2)
+[![](https://img.shields.io/badge/libsmb2--scripts-0.3.0-7DCFFF.svg?style=for-the-badge)](CHANGELOG.md)
+[![](https://img.shields.io/badge/libsmb2-master%202026--11--07-orange.svg?style=for-the-badge)](https://github.com/sahlberg/libsmb2)
 [![](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/github/stars/ales-drnz/libsmb2-scripts?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ales-drnz/libsmb2-scripts)
 [![](https://img.shields.io/discord/1485588004029333516?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/g2Qf4Mq9MP)
 [![](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/cw/ales_drnz)
 [![](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ales.drnz)
 
-The build scripts for the libsmb2 inside [`dart_smb2`](https://pub.dev/packages/dart_smb2). They compile a pinned upstream [libsmb2](https://github.com/sahlberg/libsmb2) commit with a small set of patches the package relies on, for macOS, iOS, Android, Windows and Linux.
+The build scripts for the libsmb2 inside [`dart_smb2`](https://pub.dev/packages/dart_smb2). They compile a pinned upstream [libsmb2](https://github.com/sahlberg/libsmb2) commit with a small set of patches the package relies on, and link it with [OpenSSL](https://www.openssl.org)'s libcrypto, for macOS, iOS, Android, Windows and Linux.
 
 Everything runs from `./build`, a terminal menu where you pick the targets and follow the builds. This repository is also the corresponding source of the LGPL-2.1 binaries `dart_smb2` ships (see [Licensing](#licensing)).
 
@@ -24,7 +24,7 @@ cd libsmb2-scripts
 ./build
 ```
 
-On Windows use `build.cmd`. You need Go, plus Docker for Linux and Windows, the Android NDK for Android, and Xcode for Apple targets.
+On Windows use `build.cmd`. You need Go, plus Docker for Linux and Windows, the Android NDK for Android, and Xcode for Apple targets; Android and Apple builds also need perl and make.
 
 ---
 
@@ -38,9 +38,9 @@ On Windows use `build.cmd`. You need Go, plus Docker for Linux and Windows, the 
 | Linux | x86_64, aarch64 | `libsmb2_linux-<arch>.so` |
 | Windows | x86_64, arm64 | `libsmb2_windows-<arch>.dll` |
 
-Each library exports libsmb2's public API (`lib/libsmb2.syms`) and nothing else, and has no SONAME, so the app bundles it under its own name. The Linux ones reference no glibc symbol newer than 2.25 and are built and tested on glibc 2.31, the oldest supported; the Android ones depend on libc only and align their 64-bit segments to 16 KB; the Windows ones import only system DLLs; all of them are stripped: the Linux and Android ones keep only the dynamic symbol table, the Windows ones carry no DWARF and no COFF symbol table beside their export table, and the Apple ones have no local symbols; the Apple ones target iOS 13.0 and macOS 10.15.
+Each library links OpenSSL 3.5's libcrypto statically, built from the pinned release tarball with only what libsmb2 uses: libsmb2 signs and seals through it, with AES-256-GCM and AES-128-GCM on SMB 3.1.1. This makes the libraries larger, about 2 to 3.5 MB each instead of 0.25 MB; the Windows arm64 libcrypto is built without assembly, as OpenSSL has no mingw target for arm64. Each library exports libsmb2's public API (`lib/libsmb2.syms`) and nothing else, none of libcrypto's, and has no SONAME, so the app bundles it under its own name. The Linux ones reference no glibc symbol newer than 2.25 and are built and tested on glibc 2.31, the oldest supported; the Android ones depend on libc only and align their 64-bit segments to 16 KB; the Windows ones import only system DLLs; all of them are stripped: the Linux and Android ones keep only the dynamic symbol table, the Windows ones carry no DWARF and no COFF symbol table beside their export table, and the Apple ones have no local symbols; the Apple ones target iOS 13.0 and macOS 10.15.
 
-The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_versions.sh`, the Docker base images are pinned by digest, llvm-mingw by SHA-256 and the apt packages of the Linux and Verify images by version, and the Android NDK is pinned by version. Linux, Android and Windows builds give the same bytes on any machine. `./build manifest` writes `release_builds/manifest.json` and `SHA256SUMS` once all nine libraries are there (CI always builds all nine), with the release, the libsmb2 pin, the source commit, the patches, the verified symbols and the hash of every library, and copies libsmb2's licence texts (`COPYING`, `LICENCE-LGPL-2.1.txt`) beside them; the xcframework zips carry them too.
+The libsmb2 commit, the OpenSSL version and the SHA-256 of both tarballs are set in `scripts/shared/_versions.sh`, the Docker base images are pinned by digest, llvm-mingw by SHA-256 and the apt packages of the Linux and Verify images by version, and the Android NDK is pinned by version. Linux, Android and Windows builds give the same bytes on any machine. `./build manifest` writes `release_builds/manifest.json` and `SHA256SUMS` once all nine libraries are there (CI always builds all nine), with the release, the libsmb2 and OpenSSL pins, the source commit, the patches, the verified symbols and the hash of every library, and copies libsmb2's licence texts (`COPYING`, `LICENCE-LGPL-2.1.txt`) and OpenSSL's (`LICENSE-OpenSSL.txt`) beside them; the xcframework zips carry them too.
 
 ---
 
@@ -112,6 +112,7 @@ The libsmb2 commit and the SHA-256 of its tarball are set in `scripts/shared/_ve
 | [Docker](https://docs.docker.com/get-docker/) | Linux, Windows and Verify |
 | Android NDK 28.2.13676358 (r28c) | Android, from the Android Studio SDK Manager |
 | Xcode | macOS and iOS |
+| perl and make | Android, macOS and iOS, for OpenSSL's `Configure` (Xcode's command line tools have both; the Docker images bring their own) |
 
 #### 1.2 What each host can build
 
@@ -125,7 +126,7 @@ Apple targets need a Mac. [GitHub Actions](#35-on-github-actions) builds everyth
 
 #### 1.3 Folder layout
 
-Building needs only this repo. The libraries, `manifest.json`, `SHA256SUMS` and libsmb2's licence texts land in `release_builds/`; the pinned tarball is cached in `sources/cache/`; `./build sources` writes the patched tree that `dart_smb2`'s `tool/ffigen.dart` reads to `sources/libsmb2-src/`.
+Building needs only this repo. The libraries, `manifest.json`, `SHA256SUMS` and the licence texts land in `release_builds/`; the pinned libsmb2 and OpenSSL tarballs are cached in `sources/cache/`; `./build sources` writes the patched tree that `dart_smb2`'s `tool/ffigen.dart` reads to `sources/libsmb2-src/`.
 
 ---
 
@@ -193,7 +194,7 @@ These variables are passed to the builds:
 | Variable | Effect |
 | :--- | :--- |
 | `JOBS=N` | parallel compile jobs, all cores by default |
-| `FORCE_DOWNLOAD=1` | download the libsmb2 tarball again |
+| `FORCE_DOWNLOAD=1` | download the libsmb2 and OpenSSL tarballs again |
 | `KEEP_BUILD=1` | keep the build folders |
 
 #### 3.5 On GitHub Actions
@@ -209,8 +210,8 @@ Every push to a `release/` branch, and every pull request, runs `.github/workflo
 From 0.2.0, `dart_smb2` gets libsmb2 through a build hook (`hook/build.dart`). When an app builds, the hook downloads the library for the target from the package's `libsmb2-rN` GitHub release and checks its SHA-256. To point the package at a release, run this in `dart_smb2`:
 
 ```bash
-tool/update_libsmb2.sh r9                         # a published release
-tool/update_libsmb2.sh r9 path/to/manifest.json   # before publishing it
+tool/update_libsmb2.sh r11                         # a published release
+tool/update_libsmb2.sh r11 path/to/manifest.json   # before publishing it
 ```
 
 It writes the release and the hashes from `manifest.json` into the hook.
@@ -228,14 +229,14 @@ hooks:
 
 #### 4.3 Verifying
 
-`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), that libsmb2's licence texts are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, that every library is stripped (no `.symtab` on ELF, no `.debug_*` section or COFF symbol on PE, no local symbol in a Mach-O slice), the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, and a context created and destroyed.
+`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), that the licence texts of libsmb2 and OpenSSL are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, that every library is stripped (no `.symtab` on ELF, no `.debug_*` section or COFF symbol on PE, no local symbol in a Mach-O slice), the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, and a context created and destroyed.
 
 #### 4.4 Publishing a release
 
 1. Build all nine libraries, usually by pushing a `release/` branch (see [3.5](#35-on-github-actions)).
 2. In `dart_smb2`, run `tool/update_libsmb2.sh rN path/to/manifest.json` with the manifest of that Build, and push its own `release/` branch. While `libsmb2-rN` is not published, its CI finds the latest successful Build of rN by itself and tests its libraries (it needs the secret `LIBSMB2_SCRIPTS_TOKEN`; see `dart_smb2`'s `.github/workflows/ci.yml`).
 3. Tag the commit `libsmb2-rN` in this repository.
-4. Create the `libsmb2-rN` release on `dart_smb2` and upload the libraries, `COPYING`, `LICENCE-LGPL-2.1.txt`, `manifest.json` and `SHA256SUMS`, naming this repository's commit in its notes. From then on `dart_smb2`'s CI takes the published release.
+4. Create the `libsmb2-rN` release on `dart_smb2` and upload the libraries, `COPYING`, `LICENCE-LGPL-2.1.txt`, `LICENSE-OpenSSL.txt`, `manifest.json` and `SHA256SUMS`, naming this repository's commit in its notes. From then on `dart_smb2`'s CI takes the published release.
 
 ---
 
@@ -243,7 +244,7 @@ hooks:
 
 `./build` is a small Go program ([Bubble Tea](https://github.com/charmbracelet/bubbletea)) that runs the shell scripts in `scripts/`, one per platform. Apple targets build with Xcode and Android with the NDK on the host; Linux, Windows and Verify run in a Docker image from `docker/Dockerfile`, which has one stage each.
 
-Each build downloads the pinned tarball and checks its SHA-256, extracts a fresh tree, installs the static `config.h` (`scripts/shared/config/`), applies the patches, compiles `lib/*.c` (all of libsmb2 except the Kerberos wrapper) and links one library that exports `lib/libsmb2.syms`. The link order is fixed (`LC_ALL=C`), so the same sources give the same bytes.
+Each build downloads the pinned tarballs and checks their SHA-256, extracts a fresh tree, installs the static `config.h` (`scripts/shared/config/`), applies the patches, builds a static libcrypto per architecture with OpenSSL's own `Configure` and `make` (a minimal one: no shared library, engines, legacy provider or algorithms libsmb2 never asks for), compiles `lib/*.c` (all of libsmb2 except the Kerberos wrapper) and links one library that exports `lib/libsmb2.syms`, with libcrypto inside. The link order is fixed (`LC_ALL=C`), so the same sources give the same bytes.
 
 #### 5.1 The patch set
 
@@ -255,6 +256,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir` and `ftruncate` when their first request cannot be built |
 | `patch_nterror_reporting.py` | shared | records the NT status on open and timeout failures |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
+| `patch_rename_replace.py` | shared | adds `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, behind `dart_smb2`'s `rename(..., overwrite: true)` |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
 | `patch_truncate_non_directory.py` | shared | makes `truncate` fail on a directory |
 | `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory, and so on a link to one (see below) |
@@ -267,7 +269,7 @@ Links to directories: `unlink` opens the link itself (`FILE_OPEN_REPARSE_POINT`)
 
 #### 5.2 Bumping upstream libsmb2
 
-1. Set `LIBSMB2_COMMIT` and `LIBSMB2_TARBALL_SHA256` in `scripts/shared/_versions.sh`, and `LIBSMB2_RELEASE` to the next `rN`.
+1. Set `LIBSMB2_COMMIT` and `LIBSMB2_TARBALL_SHA256` in `scripts/shared/_versions.sh`, and `LIBSMB2_RELEASE` to the next `rN`. OpenSSL is bumped the same way, with `OPENSSL_VERSION` and `OPENSSL_TARBALL_SHA256`; copy its `LICENSE.txt` to `licenses/openssl/` if it changed.
 2. Build: every patch applies again to the new tree, and one whose anchor moved stops the build. Drop the patches upstream now carries.
 3. Run `./build sources`, then `dart run tool/ffigen.dart` and `dart run tool/bindings_drift.dart` in `dart_smb2`.
 4. Push a `release/` branch and publish as in [4.4](#44-publishing-a-release).
@@ -280,8 +282,9 @@ Links to directories: `unlink` opens the link itself (`FILE_OPEN_REPARSE_POINT`)
 - **A Linux, Windows or Verify run fails right away**: Docker isn't running.
 - **macOS and iOS are greyed out**: they need a Mac with Xcode. GitHub Actions can build them instead.
 - **The first Docker build is slow**: it is building the image; later builds reuse it until `docker/Dockerfile` changes.
-- **"libsmb2 tarball SHA-256 mismatch"**: the cached download is stale or corrupt. Delete `sources/cache/` and build again.
+- **"libsmb2 tarball SHA-256 mismatch"** or **"OpenSSL tarball SHA-256 mismatch"**: the cached download is stale or corrupt. Delete `sources/cache/` and build again.
 - **A patch fails with "anchor not found"**: upstream moved under the patch after a bump. Update the anchor in the named `patch_*.py`.
+- **"perl not found"** or **"make not found"** on Android: install them with the system's package manager; OpenSSL's `Configure` needs both.
 - **"Android NDK 28.2.13676358 not found"** or **"the build is pinned to"**: install that NDK with the SDK Manager, set `NDK_HOME`, or build with `ALLOW_ANY_NDK=1`.
 - **"N of the 9 release assets"** from the manifest: `release_builds/` lacks some libraries. Build them, take the CI artifact, or use `ALLOW_PARTIAL=1` for a manifest that is not a release.
 
@@ -291,7 +294,8 @@ Links to directories: `unlink` opens the link itself (`FILE_OPEN_REPARSE_POINT`)
 
 - libsmb2's `lib/` and `include/` are licensed under the LGPL-2.1 or later; the texts are in [`licenses/libsmb2/`](licenses/libsmb2/). The code the patches add to libsmb2 is under the same terms.
 - Each `libsmb2-rN` release, from r9, ships `COPYING` and `LICENCE-LGPL-2.1.txt` beside the binaries and inside the xcframework zips.
-- Each `libsmb2-rN` release names, in its `manifest.json`, the commit of this repository it was built from: that commit, with the upstream tarball it pins, is the corresponding source of the release's binaries.
+- From r11 every binary links OpenSSL's libcrypto statically, built from the unmodified release tarball. OpenSSL is licensed under the Apache License 2.0; its text is in [`licenses/openssl/`](licenses/openssl/), and each release ships it as `LICENSE-OpenSSL.txt` beside the binaries and under `licenses/openssl/` in the xcframework zips.
+- Each `libsmb2-rN` release names, in its `manifest.json`, the commit of this repository it was built from: that commit, with the upstream tarballs it pins, is the corresponding source of the release's binaries.
 - The scripts, the patch scripts themselves and the TUI are BSD-3-Clause, see [LICENSE](LICENSE).
 
 ---

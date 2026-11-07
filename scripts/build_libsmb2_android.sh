@@ -6,7 +6,8 @@
 # =============================================================================
 # build_libsmb2_android.sh
 #
-# Cross-compiles libsmb2 into one shared library per Android ABI.
+# Cross-compiles libsmb2 into one shared library per Android ABI, with the
+# pinned OpenSSL's libcrypto built for each ABI and linked in statically.
 #
 # Output (release_builds/):
 #   libsmb2_android-arm64-v8a.so
@@ -16,6 +17,10 @@
 # Target: Android 7.0+ (API 24). The 64-bit ABIs are linked with 16 KB
 # segment alignment (NDK r28 default), which Android 15+ devices with 16 KB
 # pages require.
+#
+# Needs perl and make on the host for OpenSSL's Configure, which finds the
+# NDK's clang through ANDROID_NDK_ROOT and PATH (see NOTES-ANDROID.md in the
+# OpenSSL tarball); the script sets both.
 #
 # Usage (from the repo root): NDK_HOME=/path/to/ndk scripts/build_libsmb2_android.sh
 #
@@ -27,6 +32,7 @@
 #   ABIS=...           Comma-separated ABI list (default: arm64-v8a,armeabi-v7a,x86_64)
 #   JOBS=N             Parallel compile jobs (default: all cores)
 #   KEEP_BUILD=1       Do not delete the intermediate build directory
+#   FORCE_DOWNLOAD=1   Redownload the libsmb2 and OpenSSL tarballs even if cached
 # =============================================================================
 
 set -euo pipefail
@@ -82,12 +88,25 @@ case "$(uname -s)" in
 esac
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST/bin"
 
+for tool in perl make; do
+  command -v "$tool" >/dev/null || {
+    echo "error: $tool not found (OpenSSL's Configure needs it)." >&2
+    exit 1
+  }
+done
+
+# OpenSSL's android-* targets take the NDK from ANDROID_NDK_ROOT and pick
+# <triple><API>-clang and llvm-ar from the NDK on PATH.
+export ANDROID_NDK_ROOT="$NDK"
+export PATH="$TOOLCHAIN:$PATH"
+
 # ── Sources ──────────────────────────────────────────────────────────────────
 
 echo "=== libsmb2: preparing sources ==="
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 prepare_libsmb2_sources "$BUILD_DIR"
+prepare_openssl_sources "$BUILD_DIR"
 libsmb2_sources
 write_export_lists "$BUILD_DIR"
 
@@ -106,6 +125,15 @@ cc_for_abi() {
   esac
 }
 
+# OpenSSL's Configure target for each ABI.
+openssl_target() {
+  case "$1" in
+    arm64-v8a)   echo "android-arm64"  ;;
+    armeabi-v7a) echo "android-arm"    ;;
+    x86_64)      echo "android-x86_64" ;;
+  esac
+}
+
 build_abi() {
   local abi="$1" prefix
   prefix="$(cc_for_abi "$abi")"
@@ -116,16 +144,22 @@ build_abi() {
   local build="$BUILD_DIR/$abi"
   rm -rf "$build"
   echo ""
+  build_libcrypto "$BUILD_DIR/openssl-$abi" "$(openssl_target "$abi")" \
+    "-D__ANDROID_API__=$API"
+
   echo "  Compiling $abi..."
-  compile_objects "$build" "$cc" --
+  compile_objects "$build" "$cc" -- "${OPENSSL_INCLUDES[@]}"
 
   echo "  Linking $abi..."
   # No SONAME: Flutter bundles the file under the name the package gives it.
   # -s drops the static symbol table (the Android Gradle plugin would strip
   # it anyway); the exported API lives in .dynsym, which stays.
-  "$cc" -shared -s -o "$build/libsmb2.so" "$build"/*.o \
+  # libcrypto.a comes after the objects, so only what they use is linked;
+  # the version script keeps its symbols out of .dynsym.
+  "$cc" -shared -s -o "$build/libsmb2.so" "$build"/*.o "$LIBCRYPTO" \
     -Wl,--version-script="$BUILD_DIR/exports.ver" \
     -Wl,--build-id=none \
+    -Wl,--gc-sections \
     -Wl,--as-needed
 
   local output="$OUTPUT_DIR/libsmb2_android-${abi}.so"

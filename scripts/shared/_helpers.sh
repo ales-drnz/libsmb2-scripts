@@ -78,6 +78,93 @@ prepare_libsmb2_sources() {
   done
 }
 
+# ── OpenSSL (libcrypto) ──────────────────────────────────────────────────────
+# prepare_openssl_sources <build_dir>
+#
+# Downloads the pinned OpenSSL tarball into sources/cache/ (skipped when
+# already there), checks its SHA-256 and extracts it into
+# <build_dir>/openssl-src. Each architecture then builds out of tree with
+# build_libcrypto, so one extracted copy serves them all. Sets OPENSSL_SRC.
+prepare_openssl_sources() {
+  local build_dir="$1"
+  local cache_dir="$LIBSMB2_SCRIPTS_ROOT/sources/cache"
+  local tarball="$cache_dir/openssl-${OPENSSL_VERSION}.tar.gz"
+  local url="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+
+  mkdir -p "$cache_dir"
+  if [ ! -f "$tarball" ] || [ "${FORCE_DOWNLOAD:-0}" = "1" ]; then
+    echo "  Fetching OpenSSL ${OPENSSL_VERSION}..."
+    curl -fsSL --retry 3 "$url" -o "$tarball.tmp"
+    mv "$tarball.tmp" "$tarball"
+  fi
+
+  local sum
+  sum="$(sha256sum "$tarball" 2>/dev/null | cut -d' ' -f1)" \
+    || sum="$(shasum -a 256 "$tarball" | cut -d' ' -f1)"
+  if [ "$sum" != "$OPENSSL_TARBALL_SHA256" ]; then
+    echo "ERROR: OpenSSL tarball SHA-256 mismatch:" >&2
+    echo "  expected $OPENSSL_TARBALL_SHA256" >&2
+    echo "  got      $sum" >&2
+    echo "Delete $tarball and retry, or update OPENSSL_TARBALL_SHA256 after a bump." >&2
+    return 1
+  fi
+
+  export OPENSSL_SRC="$build_dir/openssl-src"
+  rm -rf "$OPENSSL_SRC"
+  mkdir -p "$OPENSSL_SRC"
+  tar xzf "$tarball" -C "$OPENSSL_SRC" --strip-components=1
+}
+
+# The Configure options every libcrypto is built with: a static library
+# with only what libsmb2's EVP calls need around it — no shared library,
+# engines, loadable modules or legacy provider, no apps, tests or docs, and
+# no config file read at startup. -fPIC, as it lands in a shared library.
+OPENSSL_CONFIGURE_OPTIONS=(
+  no-shared no-module no-dso no-engine no-legacy no-deprecated
+  no-apps no-tests no-docs no-ui-console no-autoload-config no-comp
+  no-async no-ssl-trace no-filenames
+  # Algorithms libsmb2 never asks for: the default provider links in every
+  # one it is built with, so each one left out shrinks the library.
+  no-aria no-bf no-blake2 no-camellia no-cast no-chacha no-cmp no-cms
+  no-ct no-des no-dh no-dsa no-ec no-ecx no-idea no-md4 no-mdc2 no-ocb
+  no-ocsp no-poly1305 no-rc2 no-rc4 no-rmd160 no-scrypt no-seed no-siphash
+  no-sm2 no-sm3 no-sm4 no-srp no-ts no-whirlpool no-argon2 no-ml-dsa
+  no-ml-kem no-slh-dsa
+  -fPIC
+)
+
+# build_libcrypto <out_dir> <Configure target> [Configure options...]
+#
+# Builds libcrypto.a for one architecture in <out_dir> from OPENSSL_SRC,
+# with the compiler and tools the caller exports (CC, AR, RANLIB, ...).
+# Leaves <out_dir>/libcrypto.a and the generated headers in
+# <out_dir>/include, and sets OPENSSL_INCLUDES (generated headers first,
+# then the source tree's) and LIBCRYPTO for the compile and link steps.
+#
+# SOURCE_DATE_EPOCH pins the build date OpenSSL records in the library, so
+# the same sources give the same bytes.
+build_libcrypto() {
+  local out="$1" target="$2"; shift 2
+  local jobs="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)}"
+  rm -rf "$out"
+  mkdir -p "$out"
+  echo "  Configuring OpenSSL ${OPENSSL_VERSION} ($target)..."
+  (
+    cd "$out"
+    export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1767225600}"
+    perl "$OPENSSL_SRC/Configure" "$target" \
+      "${OPENSSL_CONFIGURE_OPTIONS[@]}" "$@" > configure.log 2>&1 \
+      || { cat configure.log >&2; exit 1; }
+    echo "  Building libcrypto ($target)..."
+    make -j"$jobs" build_generated > build.log 2>&1 \
+      && make -j"$jobs" libcrypto.a >> build.log 2>&1 \
+      || { tail -n 60 build.log >&2; exit 1; }
+  )
+  OPENSSL_INCLUDES=("-I$out/include" "-I$OPENSSL_SRC/include")
+  LIBCRYPTO="$out/libcrypto.a"
+  [ -f "$LIBCRYPTO" ] || { echo "error: $LIBCRYPTO was not built" >&2; return 1; }
+}
+
 # ── Shared compile + link pieces ─────────────────────────────────────────────
 # Every platform compiles the same sources with the same flags; only the
 # compiler, the target flags and the link step differ.
@@ -152,9 +239,10 @@ write_export_lists() {
 }
 
 # add_licenses_to_zip <zip>
-# Adds licenses/libsmb2/ (libsmb2's COPYING and the LGPL-2.1 text) to an
-# xcframework zip, beside libsmb2.xcframework, so the archive carries the
-# licence of the binaries it holds.
+# Adds licenses/libsmb2/ (libsmb2's COPYING and the LGPL-2.1 text) and
+# licenses/openssl/ (OpenSSL's Apache-2.0 LICENSE.txt) to an xcframework
+# zip, beside libsmb2.xcframework, so the archive carries the licences of
+# the code it holds.
 add_licenses_to_zip() {
-  (cd "$LIBSMB2_SCRIPTS_ROOT" && zip -r -X -q "$1" licenses/libsmb2)
+  (cd "$LIBSMB2_SCRIPTS_ROOT" && zip -r -X -q "$1" licenses/libsmb2 licenses/openssl)
 }

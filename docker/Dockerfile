@@ -8,11 +8,12 @@
 #   docker build --target windows -t libsmb2-build-windows ./docker/
 #   docker build --target verify  -t libsmb2-build-verify  ./docker/
 #
-#   linux   : ubuntu:20.04, gcc + the aarch64 cross gcc. glibc 2.31, so the
-#             libraries it links load on every distro since Ubuntu 20.04 and
-#             Debian 11.
+#   linux   : ubuntu:20.04, gcc + the aarch64 cross gcc, and perl + make for
+#             OpenSSL's Configure. glibc 2.31, so the libraries it links load
+#             on every distro since Ubuntu 20.04 and Debian 11.
 #   windows : ubuntu:24.04 + llvm-mingw (clang, lld, UCRT) for both x86_64 and
-#             arm64. Nothing else on PATH provides a mingw compiler.
+#             arm64, and perl + make for OpenSSL. Nothing else on PATH
+#             provides a mingw compiler.
 #   verify  : ubuntu:20.04 + binutils, LLVM tools and gcc: inspects every
 #             binary (exports, glibc floor, alignment, imports, Mach-O
 #             minimum OS) and dlopens the ones this host can load, on the
@@ -23,10 +24,11 @@
 # tools) by exact version: focal's archive no longer changes, so an image
 # built later holds the same toolchain, and a version that ever went missing
 # would stop the build instead of changing it. Their dependencies come with
-# them unpinned, from the same frozen archive. The windows stage's four apt
-# packages (certificates, curl, python3, xz) are not part of the toolchain
-# and stay unpinned: noble's archive drops a version as soon as it is
-# superseded, so a pin there would break the build at the next update.
+# them unpinned, from the same frozen archive. The windows stage's apt
+# packages (certificates, curl, make, perl, python3, xz) are not part of the
+# compiler toolchain and stay unpinned: noble's archive drops a version as
+# soon as it is superseded, so a pin there would break the build at the next
+# update.
 #
 # The orchestrator tags each image with a hash of this file and rebuilds it
 # when the file changes. The Android NDK is not here:
@@ -46,6 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libc6-dev-arm64-cross=2.31-0ubuntu9.9cross1 \
       ca-certificates=20240203~20.04.1 \
       curl=7.68.0-1ubuntu2.25 \
+      make=4.2.1-1.2 \
+      perl=5.30.0-9ubuntu0.5 \
       python3=3.8.2-0ubuntu2 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /scripts
@@ -57,6 +61,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
+      make \
+      perl \
       python3 \
       xz-utils \
     && rm -rf /var/lib/apt/lists/*

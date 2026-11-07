@@ -12,8 +12,9 @@
 #
 #   all       the nine release assets are present, and each exports every
 #             symbol in verify/symbols.txt; libsmb2's licence texts
-#             (COPYING, LICENCE-LGPL-2.1.txt) are present and match
-#             licenses/libsmb2/; SHA256SUMS, when written, matches the files
+#             (COPYING, LICENCE-LGPL-2.1.txt) and OpenSSL's
+#             (LICENSE-OpenSSL.txt) are present and match licenses/;
+#             SHA256SUMS, when written, matches the files
 #   Linux     ELF machine per arch; stripped (no .symtab); no glibc symbol
 #             newer than 2.31; the host-arch library is dlopened on this
 #             glibc 2.31 system, its symbols resolved and a context created
@@ -22,13 +23,13 @@
 #             64-bit ABIs; depends on nothing but libc / libdl / libm
 #   Windows   PE machine per arch; stripped (no .debug_* section, no COFF
 #             symbol table); imports only system DLLs (kernel32, ws2_32,
-#             bcrypt, the UCRT api sets)
+#             bcrypt, user32, advapi32, the UCRT api sets)
 #   Apple     slices per xcframework; LC_BUILD_VERSION minimum OS within the
 #             floor (iOS 13.0, macOS 10.15; arm64-only slices are raised to
 #             what that arch requires: simulator 14.0, macOS 11.0); no
 #             local symbols left in any slice (strip -x); the macOS
 #             framework keeps its Versions/Current symlinks; each zip holds
-#             licenses/libsmb2/
+#             licenses/libsmb2/ and licenses/openssl/
 #
 # Usage (from the repo root): scripts/verify_binaries.sh
 # RELEASE_DIR overrides the directory it reads.
@@ -133,8 +134,21 @@ check_licenses() {
   [ "$bad" -eq 1 ] || ok "$label: COPYING and LICENCE-LGPL-2.1.txt"
 }
 
+# check_openssl_license <label> <file>: OpenSSL's Apache-2.0 text, for the
+# libcrypto linked into every binary.
+check_openssl_license() {
+  if [ ! -f "$2" ]; then
+    fail "$1: OpenSSL licence $(basename "$2") not found"
+  elif ! cmp -s "$2" "$ROOT/licenses/openssl/LICENSE.txt"; then
+    fail "$1: $(basename "$2") differs from licenses/openssl/LICENSE.txt"
+  else
+    ok "$1: OpenSSL licence"
+  fi
+}
+
 # ── Licences and checksums ───────────────────────────────────────────────────
 check_licenses "release" "$RELEASE_DIR"
+check_openssl_license "release" "$RELEASE_DIR/LICENSE-OpenSSL.txt"
 if [ -f "$RELEASE_DIR/SHA256SUMS" ]; then
   if (cd "$RELEASE_DIR" && sha256sum --quiet -c SHA256SUMS); then
     ok "SHA256SUMS: $(wc -l < "$RELEASE_DIR/SHA256SUMS") files match"
@@ -211,7 +225,7 @@ for arch in x86_64 arm64; do
   imports="$(llvm-objdump -p "$f" | sed -n 's/.*DLL Name: //p' | sort -u)"
   for dll in $imports; do
     case "$(echo "$dll" | tr '[:upper:]' '[:lower:]')" in
-      kernel32.dll|ws2_32.dll|bcrypt.dll|api-ms-win-crt-*.dll) ;;
+      kernel32.dll|ws2_32.dll|bcrypt.dll|user32.dll|advapi32.dll|api-ms-win-crt-*.dll) ;;
       *) fail "$name: unexpected import $dll" ;;
     esac
   done
@@ -244,6 +258,7 @@ check_slice() {
 if asset libsmb2_ios.xcframework.zip; then
   rm -rf "$WORK/ios" && unzip -q "$f" -d "$WORK/ios"
   check_licenses "libsmb2_ios.xcframework.zip" "$WORK/ios/licenses/libsmb2"
+  check_openssl_license "libsmb2_ios.xcframework.zip" "$WORK/ios/licenses/openssl/LICENSE.txt"
   xc="$WORK/ios/libsmb2.xcframework"
   check_slice "ios-arm64" "$xc/ios-arm64/libsmb2.framework/libsmb2" "arm64 " 13.0 13.0
   check_slice "ios-simulator" "$xc/ios-arm64_x86_64-simulator/libsmb2.framework/libsmb2" "arm64 x86_64 " 13.0 14.0
@@ -252,6 +267,7 @@ fi
 if asset libsmb2_macos.xcframework.zip; then
   rm -rf "$WORK/macos" && unzip -q "$f" -d "$WORK/macos"
   check_licenses "libsmb2_macos.xcframework.zip" "$WORK/macos/licenses/libsmb2"
+  check_openssl_license "libsmb2_macos.xcframework.zip" "$WORK/macos/licenses/openssl/LICENSE.txt"
   fw="$WORK/macos/libsmb2.xcframework/macos-arm64_x86_64/libsmb2.framework"
   if [ -L "$fw/Versions/Current" ] && [ -L "$fw/libsmb2" ]; then
     ok "macos: framework symlinks preserved"

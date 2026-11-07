@@ -15,8 +15,9 @@ import (
 // what the build actually fetches.
 type depInfo struct {
 	Name    string
-	Version string // human-readable marker (LIBSMB2_VERSION)
-	Commit  string // pinned commit hash
+	Version string // human-readable marker (LIBSMB2_VERSION, OPENSSL_VERSION)
+	Commit  string // pinned commit hash; empty for a release tarball
+	Tag     string // release tag of a release tarball (OpenSSL)
 	SHA256  string // tarball checksum
 }
 
@@ -35,10 +36,21 @@ func scanDeps(scriptsRoot string) []depInfo {
 	if vars["LIBSMB2_COMMIT"] == "" {
 		return nil
 	}
-	return []depInfo{{
+	deps := []depInfo{{
 		Name:    "libsmb2",
 		Version: vars["LIBSMB2_VERSION"],
 		Commit:  vars["LIBSMB2_COMMIT"],
 		SHA256:  vars["LIBSMB2_TARBALL_SHA256"],
 	}}
+	// libcrypto, built by every platform script and linked into each
+	// library.
+	if v := vars["OPENSSL_VERSION"]; v != "" {
+		deps = append(deps, depInfo{
+			Name:    "OpenSSL",
+			Version: v,
+			Tag:     "openssl-" + v,
+			SHA256:  vars["OPENSSL_TARBALL_SHA256"],
+		})
+	}
+	return deps
 }

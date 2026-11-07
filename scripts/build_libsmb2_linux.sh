@@ -6,8 +6,9 @@
 # =============================================================================
 # build_libsmb2_linux.sh
 #
-# Fetches the pinned libsmb2 source, applies the patch set, and compiles it
-# into one shared library per architecture.
+# Fetches the pinned libsmb2 source, applies the patch set, builds the pinned
+# OpenSSL's libcrypto for each architecture, and compiles libsmb2 into one
+# shared library per architecture with libcrypto linked in statically.
 #
 # Output (release_builds/):
 #   libsmb2_linux-x86_64.so
@@ -17,7 +18,8 @@
 # later). Build inside the `linux` stage of docker/Dockerfile (ubuntu:20.04),
 # so no binary references a newer glibc symbol; `./build verify` checks it.
 #
-# Compilers: gcc (x86_64) and aarch64-linux-gnu-gcc (aarch64 cross).
+# Compilers: gcc (x86_64) and aarch64-linux-gnu-gcc (aarch64 cross); perl
+# and make for OpenSSL's Configure.
 #
 # Usage (from the repo root): scripts/build_libsmb2_linux.sh
 #
@@ -25,7 +27,7 @@
 #   ARCHS=...         Comma-separated arch list (default: x86_64,aarch64)
 #   JOBS=N            Parallel compile jobs (default: all cores)
 #   KEEP_BUILD=1      Do not delete the intermediate build directory
-#   FORCE_DOWNLOAD=1  Redownload the libsmb2 tarball even if cached
+#   FORCE_DOWNLOAD=1  Redownload the libsmb2 and OpenSSL tarballs even if cached
 # =============================================================================
 
 set -euo pipefail
@@ -40,6 +42,7 @@ echo "=== libsmb2: preparing sources ==="
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 prepare_libsmb2_sources "$BUILD_DIR"
+prepare_openssl_sources "$BUILD_DIR"
 libsmb2_sources
 write_export_lists "$BUILD_DIR"
 
@@ -47,6 +50,20 @@ cc_for_arch() {
   case "$1" in
     x86_64)  echo "gcc" ;;
     aarch64) echo "aarch64-linux-gnu-gcc" ;;
+    *)       echo "" ;;
+  esac
+}
+
+# OpenSSL's Configure target and the binutils prefix for each arch.
+openssl_target() {
+  case "$1" in
+    x86_64)  echo "linux-x86_64" ;;
+    aarch64) echo "linux-aarch64" ;;
+  esac
+}
+tool_prefix() {
+  case "$1" in
+    aarch64) echo "aarch64-linux-gnu-" ;;
     *)       echo "" ;;
   esac
 }
@@ -60,19 +77,26 @@ build_arch() {
     exit 1
   }
 
-  local build="$BUILD_DIR/$arch"
+  local build="$BUILD_DIR/$arch" prefix
+  prefix="$(tool_prefix "$arch")"
   rm -rf "$build"
   echo ""
+  CC="$cc" AR="${prefix}ar" RANLIB="${prefix}ranlib" \
+    build_libcrypto "$BUILD_DIR/openssl-$arch" "$(openssl_target "$arch")"
+
   echo "  Compiling $arch with $cc..."
-  compile_objects "$build" "$cc" --
+  compile_objects "$build" "$cc" -- "${OPENSSL_INCLUDES[@]}"
 
   echo "  Linking $arch..."
   # No SONAME: consumers rename the file when they bundle it, and the
   # loader then knows it by that name. -s drops the static symbol table;
   # the exported API lives in .dynsym, which stays.
-  "$cc" -shared -s -o "$build/libsmb2.so" "$build"/*.o \
+  # libcrypto.a comes after the objects, so only what they use is linked;
+  # the version script keeps its symbols out of .dynsym.
+  "$cc" -shared -s -o "$build/libsmb2.so" "$build"/*.o "$LIBCRYPTO" \
     -Wl,--version-script="$BUILD_DIR/exports.ver" \
     -Wl,--build-id=none \
+    -Wl,--gc-sections \
     -pthread
 
   local output="$OUTPUT_DIR/libsmb2_linux-${arch}.so"

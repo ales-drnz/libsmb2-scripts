@@ -68,7 +68,8 @@ KNOBS (env, forwarded into Docker builds)
   JOBS=N  KEEP_BUILD=1  FORCE_DOWNLOAD=1
 
 Outputs land in release_builds/. Apple targets require macOS; Linux, Windows
-and Verify run in Docker; Android needs the pinned NDK on the host. CI
+and Verify run in Docker; Android needs the pinned NDK on the host. Android
+and Apple builds also need perl and make for OpenSSL's Configure. CI
 (.github/workflows/build.yml) builds all nine on GitHub's runners.
 `)
 }

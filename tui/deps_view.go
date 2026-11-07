@@ -23,7 +23,11 @@ func (m *model) viewDeps() string {
 	}
 	for _, d := range m.deps {
 		writeLine(&b, titleStyle.Render("  "+d.Name), dimStyle.Render("  "+d.Version))
-		writeLine(&b, dimStyle.Render("    commit  "), textStyle.Render(d.Commit))
+		if d.Commit != "" {
+			writeLine(&b, dimStyle.Render("    commit  "), textStyle.Render(d.Commit))
+		} else {
+			writeLine(&b, dimStyle.Render("    tag     "), textStyle.Render(d.Tag))
+		}
 		writeLine(&b, dimStyle.Render("    sha256  "), textStyle.Render(d.SHA256))
 	}
 	writeLine(&b)

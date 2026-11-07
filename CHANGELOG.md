@@ -1,3 +1,43 @@
+## [0.3.0] - 7-11-2026
+
+### All platforms
+**Changed**
+- libsmb2 is upstream master of 7-11-2026 (a52c157). None of the local patches is upstream yet, so none is dropped.
+- Every library links OpenSSL 3.5.9's libcrypto statically, built from the pinned release tarball with only what libsmb2 uses; none of its symbols is exported. libsmb2 signs and seals through it, and SMB 3.1.1 sessions offer AES-256-GCM and AES-128-GCM ahead of AES-128-CCM.
+- The libraries are larger because of libcrypto: about 2 to 3.5 MB each instead of 0.25 MB.
+- The libraries are `libsmb2-r11`.
+
+**Added**
+- `patch_rename_replace.py`: `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, for dart_smb2's `rename(..., overwrite: true)`.
+- OpenSSL's licence ships with the binaries: `LICENSE-OpenSSL.txt` beside them, in `SHA256SUMS` and under `licenses` in `manifest.json`, and `licenses/openssl/` in both xcframework zips. `verify` checks it.
+- `manifest.json` records the OpenSSL version and tarball hash (`openssl`) and the licence of libcrypto (`licenseNotes`). `assets` still lists the nine binaries only.
+- `verify/symbols.txt` lists `smb2_link`, `smb2_symlink`, `smb2_rename2` and the change notification calls.
+
+**Fixed**
+- Zero-length reads and writes no longer fail, and keep a CreditCharge of 1.
+- A copychunk error reply is told by its size.
+- Lease and oplock breaks and their acknowledgements are encoded and decoded correctly.
+
+### Linux
+**Changed**
+- The Docker image installs perl and make for OpenSSL's `Configure`. The glibc floor is unchanged.
+
+### Android
+**Changed**
+- Building needs perl and make on the host. The libraries still depend on libc only.
+
+### Windows
+**Changed**
+- The DLLs also import `user32` and `advapi32`, which libcrypto uses; `verify` allows them.
+- OpenSSL has no mingw target for arm64: its libcrypto builds with `scripts/shared/config/openssl-mingw-arm64.conf`, without assembly.
+
+**Added**
+- `config.h` defines `O_DIRECTORY`, which the UCRT lacks, so `smb2_open()` can open a directory, as dart_smb2's watches need.
+
+### macOS and iOS
+**Changed**
+- Building needs perl and make, which Xcode's command line tools have. Not built or verified off a Mac yet.
+
 ## [0.2.5] - 5-11-2026
 
 ### All platforms

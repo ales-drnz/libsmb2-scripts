@@ -8,7 +8,8 @@
 #
 # Writes release_builds/manifest.json and release_builds/SHA256SUMS, and
 # copies libsmb2's licence texts (licenses/libsmb2/COPYING and
-# LICENCE-LGPL-2.1.txt) beside them; all of it is published with the
+# LICENCE-LGPL-2.1.txt) and OpenSSL's (licenses/openssl/LICENSE.txt, as
+# LICENSE-OpenSSL.txt) beside them; all of it is published with the
 # binaries on the libsmb2-<release> GitHub release. The manifest
 # states what the release contains, so consumers never re-derive it from this
 # repo's scripts:
@@ -16,8 +17,12 @@
 #   release   the release tag suffix (LIBSMB2_RELEASE, e.g. "r9")
 #   libsmb2   the pinned upstream commit, its describe-style version and the
 #             SHA-256 of the source tarball
+#   openssl   the OpenSSL version whose libcrypto is linked into every
+#             binary, and the SHA-256 of its tarball
 #   source    the libsmb2-scripts commit the binaries were built from (the
 #             LGPL corresponding source: upstream tarball + patches/)
+#   license   libsmb2's licence (SPDX); licenseNotes adds the bundled
+#             libcrypto's
 #   patches   the patch scripts applied, per platform overlay
 #   symbols   the functions every binary is verified to export
 #             (verify/symbols.txt)
@@ -53,6 +58,7 @@ RELEASE_DIR="${RELEASE_DIR:-$ROOT/release_builds}"
 for f in COPYING LICENCE-LGPL-2.1.txt; do
   cp "$ROOT/licenses/libsmb2/$f" "$RELEASE_DIR/$f"
 done
+cp "$ROOT/licenses/openssl/LICENSE.txt" "$RELEASE_DIR/LICENSE-OpenSSL.txt"
 
 SOURCE_COMMIT="${SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
 if [ -z "${SOURCE_COMMIT_ALLOW_DIRTY:-}" ] && [ -n "$(git -C "$ROOT" status --porcelain -- patches scripts docker 2>/dev/null)" ]; then
@@ -119,7 +125,7 @@ assets = {
 }
 licenses = {
     name: hashlib.sha256((release_dir / name).read_bytes()).hexdigest()
-    for name in ("COPYING", "LICENCE-LGPL-2.1.txt")
+    for name in ("COPYING", "LICENCE-LGPL-2.1.txt", "LICENSE-OpenSSL.txt")
 }
 
 patches = {
@@ -140,11 +146,18 @@ manifest = {
         "version": os.environ["LIBSMB2_VERSION"],
         "tarballSha256": os.environ["LIBSMB2_TARBALL_SHA256"],
     },
+    "openssl": {
+        "version": os.environ["OPENSSL_VERSION"],
+        "tarballSha256": os.environ["OPENSSL_TARBALL_SHA256"],
+    },
     "source": {
         "repository": "https://github.com/ales-drnz/libsmb2-scripts",
         "commit": os.environ["SOURCE_COMMIT"],
     },
     "license": "LGPL-2.1-or-later",
+    "licenseNotes": "libsmb2 is LGPL-2.1-or-later; the OpenSSL libcrypto "
+                    "linked statically into every binary is Apache-2.0 "
+                    "(LICENSE-OpenSSL.txt).",
     "patches": patches,
     "symbols": symbols,
     "assets": assets,

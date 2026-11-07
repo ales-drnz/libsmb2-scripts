@@ -20,9 +20,16 @@
 /* #undef HAVE_GSSAPI_GSSAPI_H */
 /* #undef HAVE_DCERPC_FULL */          /* full DCE/RPC stays in libdcerpc */
 #define PACKAGE "libsmb2"
-/* configure.ac of the pinned commit says 7.0.0 (git describe: 6.2-596). */
+/* configure.ac of the pinned commit says 7.0.0 (git describe: 6.2-606). */
 #define PACKAGE_VERSION "7.0.0"
 #define VERSION "7.0.0"
+/*
+ * Signing and sealing through OpenSSL 3's libcrypto, on every platform:
+ * AES-256-GCM and AES-128-GCM on SMB 3.1.1, AES-128-CCM, AES-CMAC and
+ * HMAC-SHA256. Each build script builds the pinned libcrypto
+ * (OPENSSL_VERSION in _versions.sh) and links it statically.
+ */
+#define HAVE_OPENSSL 1
 #if defined(__APPLE__)
 /* AES through CommonCrypto (lib/aes_apple.c) instead of the reference C
  * implementation; upstream gates it on this check since 2026-08. */
@@ -109,6 +116,13 @@
 #define NEED_RANDOM 1
 #define NEED_SRANDOM 1
 #define NEED_GETLOGIN_R 1
+/*
+ * The UCRT has no O_DIRECTORY, and without it smb2_open() asks for a
+ * non-directory on every open, so a directory cannot be opened as a handle
+ * (dart_smb2 opens one to watch it for changes). Any bit the UCRT's _O_*
+ * flags leave free will do; dart_smb2's Windows open flags use the same.
+ */
+#define O_DIRECTORY 0x00200000
 #else /* Linux (glibc — both docker cross toolchains) */
 #define HAVE_ARPA_INET_H 1
 #define HAVE_DLFCN_H 1
