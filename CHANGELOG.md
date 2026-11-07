@@ -9,6 +9,8 @@
 - `verify` checks that the OpenSSL licence is there.
 - `manifest.json` records the OpenSSL version and tarball hash under `openssl`, and the licence of libcrypto under `licenseNotes`. Its `assets` still lists the nine binaries only.
 - `verify/symbols.txt` lists `smb2_link`, `smb2_symlink`, `smb2_rename2` and the change notification calls.
+- `patch_scripts_release.py` adds `smb2_scripts_release()`, which returns the release the library was built as (`"r11"`), the same on every platform.
+- `verify` checks that the host library's `smb2_scripts_release()` returns `LIBSMB2_RELEASE`.
 
 **Changed**
 - libsmb2 is upstream master of 7-11-2026 (a52c157). None of the local patches is upstream yet, so none is dropped.
