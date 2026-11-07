@@ -11,9 +11,11 @@
 # locally through `./build verify` and in CI.
 #
 #   all       the nine release assets are present, and each exports every
-#             symbol in verify/symbols.txt; libsmb2's licence texts
-#             (COPYING, LICENCE-LGPL-2.1.txt) and OpenSSL's
-#             (LICENSE-OpenSSL.txt) are present and match licenses/;
+#             symbol in verify/symbols.txt and none of libcrypto's
+#             (EVP_, OSSL_, OPENSSL_, CRYPTO_, ERR_, BIO_, ...);
+#             libsmb2's licence texts (COPYING, LICENCE-LGPL-2.1.txt) and
+#             OpenSSL's (LICENSE-OpenSSL.txt) are present and match
+#             licenses/;
 #             SHA256SUMS, when written, matches the files
 #   Linux     ELF machine per arch; stripped (no .symtab); no glibc symbol
 #             newer than 2.31; the host-arch library is dlopened on this
@@ -67,6 +69,22 @@ check_exports() {
     fail "$label: missing exports: $(echo "$missing" | tr '\n' ' ')"
   else
     ok "$label: exports all $(required_symbols | wc -l) bound symbols"
+  fi
+  check_no_libcrypto_exports "$label" "$exported"
+}
+
+# check_no_libcrypto_exports <label> <file with one exported name per line>:
+# the static libcrypto stays private — none of its symbols is exported, so
+# it cannot clash with another OpenSSL loaded in the same process. The
+# optional leading underscore covers Mach-O names.
+LIBCRYPTO_EXPORT_RE='^_?(EVP_|OSSL_|ossl_|OPENSSL_|CRYPTO_|ERR_|BIO_|AES_|HMAC|CMAC)'
+check_no_libcrypto_exports() {
+  local label="$1" exported="$2" leaked
+  leaked="$(grep -E "$LIBCRYPTO_EXPORT_RE" "$exported" | sort -u || true)"
+  if [ -n "$leaked" ]; then
+    fail "$label: exports $(echo "$leaked" | wc -l) libcrypto symbols: $(echo "$leaked" | head -5 | tr '\n' ' ')"
+  else
+    ok "$label: no libcrypto symbol exported"
   fi
 }
 
