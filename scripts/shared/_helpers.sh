@@ -16,6 +16,43 @@ export LC_ALL=C
 LIBSMB2_SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export LIBSMB2_SCRIPTS_ROOT
 
+# ── Pinned tarballs ─────────────────────────────────────────────────────────
+# fetch_verified_tarball <name> <url> <tarball> <expected sha256> <sha var>
+#
+# Downloads <url> to <tarball> in sources/cache/ unless it is already there
+# (FORCE_DOWNLOAD=1 fetches it again), over HTTPS only, and checks its
+# SHA-256 against <expected sha256>. <name> labels the messages and <sha var>
+# names the _versions.sh variable to update after a bump.
+fetch_verified_tarball() {
+  local name="$1" url="$2" tarball="$3" expected="$4" sha_var="$5"
+
+  mkdir -p "$(dirname "$tarball")"
+  if [ ! -f "$tarball" ] || [ "${FORCE_DOWNLOAD:-0}" = "1" ]; then
+    echo "  Fetching $name..."
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 "$url" -o "$tarball.tmp" \
+      && mv "$tarball.tmp" "$tarball" \
+      || { rm -f "$tarball.tmp"; echo "ERROR: could not download $url" >&2; return 1; }
+  fi
+
+  local sum
+  sum="$(sha256sum "$tarball" 2>/dev/null | cut -d' ' -f1)" \
+    || sum="$(shasum -a 256 "$tarball" | cut -d' ' -f1)"
+  if [ "$sum" != "$expected" ]; then
+    echo "ERROR: ${name%% *} tarball SHA-256 mismatch:" >&2
+    echo "  expected $expected" >&2
+    echo "  got      $sum" >&2
+    echo "Delete $tarball and retry, or update $sha_var after a bump." >&2
+    return 1
+  fi
+}
+
+# extract_tarball <tarball> <dir>: a fresh copy of the tree in <dir>.
+extract_tarball() {
+  rm -rf "$2"
+  mkdir -p "$2"
+  tar xzf "$1" -C "$2" --strip-components=1
+}
+
 # ── Upstream source fetch + patch ────────────────────────────────────────────
 # prepare_libsmb2_sources <build_dir>
 #
@@ -32,33 +69,14 @@ export LIBSMB2_SCRIPTS_ROOT
 # source root on return.
 prepare_libsmb2_sources() {
   local build_dir="$1"
-  local cache_dir="$LIBSMB2_SCRIPTS_ROOT/sources/cache"
-  local tarball="$cache_dir/libsmb2-${LIBSMB2_COMMIT}.tar.gz"
-  local url="https://github.com/sahlberg/libsmb2/archive/${LIBSMB2_COMMIT}.tar.gz"
+  local tarball="$LIBSMB2_SCRIPTS_ROOT/sources/cache/libsmb2-${LIBSMB2_COMMIT}.tar.gz"
 
-  mkdir -p "$cache_dir"
-
-  if [ ! -f "$tarball" ] || [ "${FORCE_DOWNLOAD:-0}" = "1" ]; then
-    echo "  Fetching libsmb2 @ ${LIBSMB2_COMMIT:0:12}..."
-    curl -fsSL "$url" -o "$tarball.tmp"
-    mv "$tarball.tmp" "$tarball"
-  fi
-
-  local sum
-  sum="$(sha256sum "$tarball" 2>/dev/null | cut -d' ' -f1)" \
-    || sum="$(shasum -a 256 "$tarball" | cut -d' ' -f1)"
-  if [ "$sum" != "$LIBSMB2_TARBALL_SHA256" ]; then
-    echo "ERROR: libsmb2 tarball SHA-256 mismatch:" >&2
-    echo "  expected $LIBSMB2_TARBALL_SHA256" >&2
-    echo "  got      $sum" >&2
-    echo "Delete $tarball and retry, or update LIBSMB2_TARBALL_SHA256 after a bump." >&2
-    return 1
-  fi
+  fetch_verified_tarball "libsmb2 @ ${LIBSMB2_COMMIT:0:12}" \
+    "https://github.com/sahlberg/libsmb2/archive/${LIBSMB2_COMMIT}.tar.gz" \
+    "$tarball" "$LIBSMB2_TARBALL_SHA256" LIBSMB2_TARBALL_SHA256 || return 1
 
   export SMB2_SRC="$build_dir/libsmb2-src"
-  rm -rf "$SMB2_SRC"
-  mkdir -p "$SMB2_SRC"
-  tar xzf "$tarball" -C "$SMB2_SRC" --strip-components=1
+  extract_tarball "$tarball" "$SMB2_SRC"
 
   cp "$LIBSMB2_SCRIPTS_ROOT/scripts/shared/config/config.h" "$SMB2_SRC/include/config.h"
 
@@ -87,32 +105,14 @@ prepare_libsmb2_sources() {
 # build_libcrypto, so one extracted copy serves them all. Sets OPENSSL_SRC.
 prepare_openssl_sources() {
   local build_dir="$1"
-  local cache_dir="$LIBSMB2_SCRIPTS_ROOT/sources/cache"
-  local tarball="$cache_dir/openssl-${OPENSSL_VERSION}.tar.gz"
-  local url="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+  local tarball="$LIBSMB2_SCRIPTS_ROOT/sources/cache/openssl-${OPENSSL_VERSION}.tar.gz"
 
-  mkdir -p "$cache_dir"
-  if [ ! -f "$tarball" ] || [ "${FORCE_DOWNLOAD:-0}" = "1" ]; then
-    echo "  Fetching OpenSSL ${OPENSSL_VERSION}..."
-    curl -fsSL --retry 3 "$url" -o "$tarball.tmp"
-    mv "$tarball.tmp" "$tarball"
-  fi
-
-  local sum
-  sum="$(sha256sum "$tarball" 2>/dev/null | cut -d' ' -f1)" \
-    || sum="$(shasum -a 256 "$tarball" | cut -d' ' -f1)"
-  if [ "$sum" != "$OPENSSL_TARBALL_SHA256" ]; then
-    echo "ERROR: OpenSSL tarball SHA-256 mismatch:" >&2
-    echo "  expected $OPENSSL_TARBALL_SHA256" >&2
-    echo "  got      $sum" >&2
-    echo "Delete $tarball and retry, or update OPENSSL_TARBALL_SHA256 after a bump." >&2
-    return 1
-  fi
+  fetch_verified_tarball "OpenSSL ${OPENSSL_VERSION}" \
+    "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
+    "$tarball" "$OPENSSL_TARBALL_SHA256" OPENSSL_TARBALL_SHA256 || return 1
 
   export OPENSSL_SRC="$build_dir/openssl-src"
-  rm -rf "$OPENSSL_SRC"
-  mkdir -p "$OPENSSL_SRC"
-  tar xzf "$tarball" -C "$OPENSSL_SRC" --strip-components=1
+  extract_tarball "$tarball" "$OPENSSL_SRC"
 }
 
 # The Configure options every libcrypto is built with: a static library
