@@ -8,7 +8,8 @@
 - The libraries are `libsmb2-r11`.
 
 **Added**
-- `patch_rename_replace.py`: `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, for dart_smb2's `rename(..., overwrite: true)`.
+- `patch_rename_replace.py`: `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, for dart_smb2's `rename(..., overwrite: true)`. Other flag bits are ignored for now; a later release will refuse them with `-EINVAL`.
+- `verify` fails when a binary exports any libcrypto symbol (`EVP_`, `OSSL_`, `OPENSSL_`, `CRYPTO_`, `ERR_`, `BIO_`, ...).
 - OpenSSL's licence ships with the binaries: `LICENSE-OpenSSL.txt` beside them, in `SHA256SUMS` and under `licenses` in `manifest.json`, and `licenses/openssl/` in both xcframework zips. `verify` checks it.
 - `manifest.json` records the OpenSSL version and tarball hash (`openssl`) and the licence of libcrypto (`licenseNotes`). `assets` still lists the nine binaries only.
 - `verify/symbols.txt` lists `smb2_link`, `smb2_symlink`, `smb2_rename2` and the change notification calls.
@@ -16,6 +17,8 @@
 **Fixed**
 - Zero-length reads and writes no longer fail, and keep a CreditCharge of 1.
 - A copychunk error reply is told by its size.
+- `patch_rename_replace.py` writes nothing unless every anchor matched, and leaves a tree it already patched alone.
+- Both tarballs are downloaded over HTTPS only, with TLS 1.2 or later and three retries.
 - Lease and oplock breaks and their acknowledgements are encoded and decoded correctly.
 
 ### Linux
@@ -25,6 +28,7 @@
 ### Android
 **Changed**
 - Building needs perl and make on the host. The libraries still depend on libc only.
+- A `CC`, `CFLAGS` or other tool variable exported in the shell no longer reaches OpenSSL's `Configure`.
 
 ### Windows
 **Changed**
@@ -36,7 +40,7 @@
 
 ### macOS and iOS
 **Changed**
-- Building needs perl and make, which Xcode's command line tools have. Not built or verified off a Mac yet.
+- Building needs perl and make, which Xcode's command line tools have. CI builds both xcframeworks on `macos-26` with Xcode 26.6, and `verify` checks them.
 
 ## [0.2.5] - 5-11-2026
 
