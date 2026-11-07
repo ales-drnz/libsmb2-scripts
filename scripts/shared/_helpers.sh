@@ -244,7 +244,7 @@ write_export_lists() {
 # Apache-2.0 LICENSE.txt) beside it, so the archive carries the licences of
 # the code it holds, then removes the xcframework.
 #
-# The same files give the same zip: entries in byte order, every time set
+# The same files give the same zip: the slices in Info.plist sorted, entries in byte order, every time set
 # to SOURCE_DATE_EPOCH in UTC, no extra attributes (-X), symlinks kept as
 # links (-y). Without this the time of the build and of the checkout ends
 # up in the archive and its SHA-256 changes on every run.
@@ -254,6 +254,17 @@ zip_xcframework() {
   # BSD date reads an epoch with -r; GNU date with -d @.
   stamp="$(TZ=UTC date -r "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
     || TZ=UTC date -d "@$epoch" +%Y%m%d%H%M.%S)"
+  # xcodebuild -create-xcframework lists the slices in Info.plist in no
+  # fixed order; sort them by identifier.
+  python3 - "$dir/libsmb2.xcframework/Info.plist" <<'PY'
+import plistlib, sys
+path = sys.argv[1]
+with open(path, 'rb') as f:
+    info = plistlib.load(f)
+info['AvailableLibraries'].sort(key=lambda lib: lib['LibraryIdentifier'])
+with open(path, 'wb') as f:
+    plistlib.dump(info, f, sort_keys=True)
+PY
   rm -rf "$dir/licenses" "$dir/$name"
   mkdir -p "$dir/licenses"
   cp -R "$LIBSMB2_SCRIPTS_ROOT/licenses/libsmb2" "$LIBSMB2_SCRIPTS_ROOT/licenses/openssl" "$dir/licenses/"
