@@ -19,8 +19,9 @@
 #             SHA256SUMS, when written, matches the files
 #   Linux     ELF machine per arch; stripped (no .symtab); no glibc symbol
 #             newer than 2.31; the host-arch library is dlopened on this
-#             glibc 2.31 system, its symbols resolved and a context created
-#             and destroyed
+#             glibc 2.31 system, its symbols resolved, smb2_scripts_release()
+#             checked to return LIBSMB2_RELEASE, and a context created and
+#             destroyed
 #   Android   ELF machine per ABI; stripped; 16 KB segment alignment on the
 #             64-bit ABIs; depends on nothing but libc / libdl / libm
 #   Windows   PE machine per arch; stripped (no .debug_* section, no COFF
@@ -41,6 +42,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/shared/_versions.sh"
 RELEASE_DIR="${RELEASE_DIR:-$ROOT/release_builds}"
 SYMBOLS="$ROOT/verify/symbols.txt"
 
@@ -195,7 +197,7 @@ for arch in x86_64 aarch64; do
   nm -D --defined-only "$f" | awk '{print $NF}' > "$WORK/exports"
   check_exports "$name" "$WORK/exports"
   if [ "$(uname -m)" = "$arch" ]; then
-    "$WORK/dlopen_test" "$f" "$SYMBOLS" || failed=$((failed + 1))
+    "$WORK/dlopen_test" "$f" "$SYMBOLS" "$LIBSMB2_RELEASE" || failed=$((failed + 1))
   else
     echo "SKIP $name: dlopen needs an $arch host"
   fi
