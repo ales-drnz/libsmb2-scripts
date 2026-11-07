@@ -31,16 +31,28 @@ import sys
 
 root = sys.argv[1]
 
+# Every edit is applied to an in-memory copy first and the files are written
+# only once all of them matched, so a drifted anchor leaves the tree as it
+# was instead of half-patched.
+files = {}
+
 
 def patch(relpath, old, new):
-    fn = os.path.join(root, relpath)
-    with open(fn) as f:
-        content = f.read()
+    if relpath not in files:
+        with open(os.path.join(root, relpath)) as f:
+            files[relpath] = f.read()
+    content = files[relpath]
     if content.count(old) != 1:
         print(f"ERROR: anchor not found exactly once in {relpath} (upstream drifted?)")
         sys.exit(1)
-    with open(fn, "w") as f:
-        f.write(content.replace(old, new, 1))
+    files[relpath] = content.replace(old, new, 1)
+
+
+# Already applied (a second run on the same tree): nothing to do.
+with open(os.path.join(root, "include/smb2/libsmb2.h")) as f:
+    if "SMB2_RENAME_REPLACE_IF_EXISTS" in f.read():
+        print("Already patched: smb2_rename2 / smb2_rename2_async")
+        sys.exit(0)
 
 
 # ── include/smb2/libsmb2.h — public declarations ─────────────────────────────
@@ -197,5 +209,9 @@ patch(
     "smb2_rename_async\n",
     "smb2_rename_async\nsmb2_rename2\nsmb2_rename2_async\n",
 )
+
+for relpath, content in files.items():
+    with open(os.path.join(root, relpath), "w") as f:
+        f.write(content)
 
 print("Patched: smb2_rename2 / smb2_rename2_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")
