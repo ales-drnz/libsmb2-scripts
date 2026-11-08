@@ -1,4 +1,4 @@
-## [0.3.0] - 7-11-2026
+## [0.3.0] - 8-11-2026
 
 ### All platforms
 **Added**
@@ -7,13 +7,13 @@
 - `verify` fails when a binary exports any libcrypto symbol (`EVP_`, `OSSL_`, `OPENSSL_`, `CRYPTO_`, `ERR_`, `BIO_`, ...).
 - OpenSSL's licence ships with the binaries: `LICENSE-OpenSSL.txt` beside them, in `SHA256SUMS` and under `licenses` in `manifest.json`, and `licenses/openssl/` in both xcframework zips.
 - `verify` checks that the OpenSSL licence is there.
-- `manifest.json` records the OpenSSL version and tarball hash under `openssl`, and the licence of libcrypto under `licenseNotes`. Its `assets` still lists the nine binaries only.
+- `manifest.json` records the OpenSSL version and tarball hash under `openssl`, and the licence of libcrypto under `licenseNotes`.
 - `verify/symbols.txt` lists `smb2_link`, `smb2_symlink`, `smb2_rename2` and the change notification calls.
 - `patch_scripts_release.py` adds `smb2_scripts_release()`, which returns the release the library was built as (`"r11"`), the same on every platform.
 - `verify` checks that the host library's `smb2_scripts_release()` returns `LIBSMB2_RELEASE`.
 
 **Changed**
-- libsmb2 is upstream master of 7-11-2026 (a52c157). None of the local patches is upstream yet, so none is dropped.
+- libsmb2 is upstream master of 7-11-2026 (a52c157).
 - Every library links OpenSSL 3.5.9's libcrypto statically, built from the pinned release tarball with only what libsmb2 uses.
 - No libcrypto symbol is exported.
 - libsmb2 signs and seals through libcrypto.
@@ -33,12 +33,10 @@
 ### Linux
 **Changed**
 - The Docker image installs perl and make for OpenSSL's `Configure`.
-- The glibc floor is unchanged.
 
 ### Android
 **Changed**
 - Building needs perl and make on the host.
-- The libraries still depend on libc only.
 - A `CC`, `CFLAGS` or other tool variable exported in the shell no longer reaches OpenSSL's `Configure`.
 
 ### Windows
