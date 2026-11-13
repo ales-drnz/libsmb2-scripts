@@ -26,7 +26,7 @@
 #
 # Options (environment variables):
 #   NDK_HOME=...       Android NDK root (also ANDROID_NDK_HOME / ANDROID_NDK)
-#   NDK_VERSION=...    Pinned NDK version (default: 28.2.13676358 = r28c)
+#   NDK_VERSION=...    Pinned NDK version (default in shared/_versions.sh)
 #   ALLOW_ANY_NDK=1    Build with another NDK when the pinned one is missing
 #   ANDROID_API=24     Minimum API level (default and floor: 24)
 #   ABIS=...           Comma-separated ABI list (default: arm64-v8a,armeabi-v7a,x86_64)
@@ -48,9 +48,6 @@ if ! [[ "$API" =~ ^[0-9]+$ ]] || (( API < 24 )); then
   echo "ERROR: ANDROID_API must be >= 24 (got '$API'). Android 7.0+ is the supported floor." >&2
   exit 1
 fi
-
-# Pinned NDK, kept equal to Flutter's default (flutter.ndkVersion).
-NDK_VERSION="${NDK_VERSION:-28.2.13676358}"
 
 # ── Locate the NDK ───────────────────────────────────────────────────────────
 

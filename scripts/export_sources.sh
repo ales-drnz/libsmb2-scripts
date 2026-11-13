@@ -9,8 +9,9 @@
 # Materializes the pinned + patched libsmb2 tree at a stable path so tooling
 # outside the build can read its headers. dart_smb2's tool/ffigen.dart reads
 # it: the bindings MUST be generated from the patched headers, because the
-# shared patches add public API (patch_utimes.py adds smb2_utimes /
-# smb2_utimes_async to include/smb2/libsmb2.h) that upstream does not have.
+# shared patches add public API to include/smb2/libsmb2.h that upstream does
+# not have (smb2_utimes, smb2_rename2 and smb2_open2 with their _async
+# forms, and smb2_scripts_release).
 #
 # Only the shared patches are applied — no platform overlay. The overlays are
 # compile fixes for one toolchain (see patches/libsmb2/windows/), not ABI

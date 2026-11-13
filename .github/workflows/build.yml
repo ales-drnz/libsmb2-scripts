@@ -84,12 +84,12 @@ jobs:
     name: Android
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      NDK_VERSION: 28.2.13676358
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The version is the NDK_VERSION of scripts/shared/_versions.sh.
       - name: Install the pinned NDK
         run: |
+          source scripts/shared/_versions.sh
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
       - name: Build

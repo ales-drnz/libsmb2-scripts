@@ -23,16 +23,24 @@ type depInfo struct {
 
 var reVersionVar = regexp.MustCompile(`export ([A-Z0-9_]+)="\$\{[A-Z0-9_]+:-([^}]*)\}"`)
 
-// scanDeps parses the _versions.sh defaults (the `${VAR:-default}` values).
-func scanDeps(scriptsRoot string) []depInfo {
+// versionDefaults parses the `export VAR="${VAR:-default}"` lines of
+// _versions.sh: the variables in file order, and the default of each.
+func versionDefaults(scriptsRoot string) (names []string, vars map[string]string) {
+	vars = map[string]string{}
 	data, err := os.ReadFile(filepath.Join(scriptsRoot, "scripts", "shared", "_versions.sh"))
 	if err != nil {
-		return nil
+		return nil, vars
 	}
-	vars := map[string]string{}
 	for _, mch := range reVersionVar.FindAllStringSubmatch(string(data), -1) {
+		names = append(names, mch[1])
 		vars[mch[1]] = mch[2]
 	}
+	return names, vars
+}
+
+// scanDeps reads the pins from the _versions.sh defaults.
+func scanDeps(scriptsRoot string) []depInfo {
+	_, vars := versionDefaults(scriptsRoot)
 	if vars["LIBSMB2_COMMIT"] == "" {
 		return nil
 	}

@@ -9,6 +9,13 @@
 # link order lands in the binary: pin it so every machine links the same.
 export LC_ALL=C
 
+# The date a build records where it has to record one (OpenSSL's build
+# date, the entries of the xcframework zips): 1-1-2026 00:00 UTC unless the
+# caller sets another. The one place that names the default. Not exported
+# here, so the compilers and linkers of libsmb2 itself see it only when the
+# caller exported it: build_libcrypto exports it for OpenSSL's build alone.
+: "${SOURCE_DATE_EPOCH:=1767225600}"
+
 # ── libsmb2-scripts repo root ────────────────────────────────────────────────
 # Self-locating: this file lives at <repo>/scripts/shared/_helpers.sh, so the
 # repo root is two levels up. Used to anchor release_builds/, sources/ and
@@ -143,8 +150,9 @@ OPENSSL_CONFIGURE_OPTIONS=(
 # <out_dir>/include, and sets OPENSSL_INCLUDES (generated headers first,
 # then the source tree's) and LIBCRYPTO for the compile and link steps.
 #
-# SOURCE_DATE_EPOCH pins the build date OpenSSL records in the library, so
-# the same sources give the same bytes.
+# SOURCE_DATE_EPOCH (its default is at the top of this file) pins the build
+# date OpenSSL records in the library, so the same sources give the same
+# bytes.
 build_libcrypto() {
   local out="$1" target="$2"; shift 2
   local jobs="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)}"
@@ -153,7 +161,7 @@ build_libcrypto() {
   echo "  Configuring OpenSSL ${OPENSSL_VERSION} ($target)..."
   (
     cd "$out" || exit 1
-    export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1767225600}"
+    export SOURCE_DATE_EPOCH
     perl "$OPENSSL_SRC/Configure" "$target" \
       "${OPENSSL_CONFIGURE_OPTIONS[@]}" "$@" > configure.log 2>&1 \
       || { cat configure.log >&2; exit 1; }
@@ -188,8 +196,10 @@ libsmb2_sources() {
     "-I$SMB2_SRC/include/smb2"
     "-I$SMB2_SRC/lib"
   )
-  # -w: upstream's own warnings (mostly unused parameters) are not ours to
-  # fix and would bury anything the patches introduce in the build log.
+  # -w: upstream's own warnings (mostly unused parameters and signed
+  # comparisons) are not ours to fix and fill the build log. It hides those
+  # of the patched-in code as well: scripts/check_patches.sh compiles the
+  # files the patches touch with warnings on, and CI runs it.
   #
   # Hardening: libsmb2 parses what a server it does not trust sends.
   # -fstack-protector-strong puts a canary in every function with an array
@@ -235,9 +245,11 @@ compile_objects() {
 }
 
 # write_export_lists <dir>
-# Turns upstream's lib/libsmb2.syms (every public function, plus the
-# patched-in smb2_utimes family) into the three linker formats, so each
-# binary exports libsmb2's public API and nothing else:
+# Turns lib/libsmb2.syms of the patched tree (every public function of
+# upstream, plus the ones the patches add: smb2_utimes, smb2_rename2,
+# smb2_open2 and their _async forms, smb2_scripts_release) into the three
+# linker formats, so each binary exports libsmb2's public API and nothing
+# else:
 #   <dir>/exports.ver  ELF version script (Linux, Android)
 #   <dir>/exports.def  module-definition file (Windows)
 #   <dir>/exports.txt  exported-symbols list (Apple, leading underscore)
@@ -268,7 +280,7 @@ write_export_lists() {
 # up in the archive and its SHA-256 changes on every run.
 zip_xcframework() {
   local dir="$1" name="$2"
-  local epoch="${SOURCE_DATE_EPOCH:-1767225600}" stamp
+  local epoch="$SOURCE_DATE_EPOCH" stamp
   # BSD date reads an epoch with -r; GNU date with -d @.
   stamp="$(TZ=UTC date -r "$epoch" +%Y%m%d%H%M.%S 2>/dev/null \
     || TZ=UTC date -d "@$epoch" +%Y%m%d%H%M.%S)"

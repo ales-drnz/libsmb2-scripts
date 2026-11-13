@@ -42,9 +42,19 @@ type Target struct {
 // simulate other hosts.
 var hostOS = runtime.GOOS
 
-// ndkVersion is the Android NDK build_libsmb2_android.sh is pinned to (its
-// NDK_VERSION default; a test keeps the two equal).
-const ndkVersion = "28.2.13676358"
+// ndkVersion is the Android NDK the build is pinned to: the NDK_VERSION
+// default of scripts/shared/_versions.sh, the one place that names it
+// (build_libsmb2_android.sh and the CI workflow read it there too).
+var ndkVersion = pinnedNDKVersion()
+
+func pinnedNDKVersion() string {
+	root, err := findScriptsRoot()
+	if err != nil {
+		return ""
+	}
+	_, vars := versionDefaults(root)
+	return vars["NDK_VERSION"]
+}
 
 // ndkFound reports whether build_libsmb2_android.sh will find a usable NDK.
 // A package var so tests can simulate either case.

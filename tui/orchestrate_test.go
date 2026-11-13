@@ -212,17 +212,24 @@ func TestExpandRejectsAnEmptyAggregateNamedExplicitly(t *testing.T) {
 	}
 }
 
-func TestNDKVersionMatchesTheAndroidScript(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "scripts", "build_libsmb2_android.sh"))
-	if err != nil {
-		t.Fatal(err)
+// The NDK version is named once, in scripts/shared/_versions.sh: the
+// orchestrator reads it there, and neither the Android script nor the
+// workflow repeats it.
+func TestNDKVersionIsPinnedInOnePlace(t *testing.T) {
+	if !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(ndkVersion) {
+		t.Fatalf("ndkVersion = %q, want the NDK_VERSION default of _versions.sh", ndkVersion)
 	}
-	m := regexp.MustCompile(`NDK_VERSION="\$\{NDK_VERSION:-([^}]+)\}"`).FindSubmatch(data)
-	if m == nil {
-		t.Fatal("NDK_VERSION default not found in build_libsmb2_android.sh")
-	}
-	if string(m[1]) != ndkVersion {
-		t.Errorf("ndkVersion = %q, build_libsmb2_android.sh pins %q", ndkVersion, m[1])
+	for _, rel := range []string{
+		filepath.Join("scripts", "build_libsmb2_android.sh"),
+		filepath.Join(".github", "workflows", "build.yml"),
+	} {
+		data, err := os.ReadFile(filepath.Join("..", rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), ndkVersion) {
+			t.Errorf("%s names NDK %s itself instead of reading _versions.sh", rel, ndkVersion)
+		}
 	}
 }
 

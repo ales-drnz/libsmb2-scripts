@@ -51,6 +51,13 @@ export LIBSMB2_BUNDLE_VERSION="${LIBSMB2_BUNDLE_VERSION:-6.2.606}"
 export OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.9}"
 export OPENSSL_TARBALL_SHA256="${OPENSSL_TARBALL_SHA256:-603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a}"
 
+# ── Android NDK ──────────────────────────────────────────────────────────────
+# The NDK build_libsmb2_android.sh builds with, kept equal to Flutter's
+# default (flutter.ndkVersion); 28.2.13676358 is r28c. The one place that
+# names it: the script, the orchestrator (tui/targets.go) and the CI
+# workflow, which installs it, all read it here.
+export NDK_VERSION="${NDK_VERSION:-28.2.13676358}"
+
 # ── Release ──────────────────────────────────────────────────────────────────
 # Tag suffix of the GitHub release the binaries are published under
 # (libsmb2-<release> on github.com/ales-drnz/dart_smb2). Recorded in
