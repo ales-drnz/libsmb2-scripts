@@ -7,3 +7,10 @@
 *.c         text eol=lf
 *.h         text eol=lf
 Dockerfile  text eol=lf
+# Read inside the containers too: the `build` launcher (bash, no extension),
+# OpenSSL's Configure reads the *.conf target file, and verify_binaries.sh
+# compares the lists in verify/ line by line, where a trailing CR would make
+# every symbol differ.
+/build              text eol=lf
+*.conf              text eol=lf
+/verify/*.txt       text eol=lf
