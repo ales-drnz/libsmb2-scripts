@@ -34,6 +34,7 @@ smb2_closedir
 
 # Files and metadata
 smb2_open
+smb2_open2
 smb2_close
 smb2_pread
 smb2_pwrite

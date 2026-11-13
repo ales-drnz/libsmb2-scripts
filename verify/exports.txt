@@ -1,6 +1,7 @@
 # Every symbol a release binary may export: upstream's lib/libsmb2.syms at
 # the pinned commit, plus the functions the patches add (smb2_rename2,
-# smb2_rename2_async, smb2_scripts_release, smb2_utimes, smb2_utimes_async).
+# smb2_rename2_async, smb2_open2, smb2_open2_async, smb2_open2_async_pdu,
+# smb2_scripts_release, smb2_utimes, smb2_utimes_async).
 # It is the patched tree's lib/libsmb2.syms, which the build turns into the
 # export list of each linker.
 #
@@ -134,6 +135,9 @@ smb2_notify_change
 smb2_notify_change_async
 smb2_notify_change_filehandle_async
 smb2_open
+smb2_open2
+smb2_open2_async
+smb2_open2_async_pdu
 smb2_open_async
 smb2_open_async_pdu
 smb2_open_async_with_oplock_or_lease
