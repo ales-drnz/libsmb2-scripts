@@ -264,6 +264,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
 | `patch_truncate_non_directory.py` | shared | makes `truncate` fail on a directory |
 | `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory, and so on a link to one (see below) |
+| `patch_unlink_mkdir_status.py` | shared | makes `unlink` and `mkdir` report the first failure of their CREATE + CLOSE, with its NT status |
 | `patch_utimes.py` | shared | adds `smb2_utimes()`, behind `dart_smb2`'s `setFileTimes` |
 | `patch_windows_csprng.py` | windows | uses `BCryptGenRandom` for the client challenge, salt and nonce |
 | `patch_windows_headers.py` | windows | builds with llvm-mingw's headers |
