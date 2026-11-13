@@ -210,7 +210,7 @@ smb2_utimes_async(struct smb2_context *smb2, const char *path,
         next_pdu = smb2_cmd_close_async(smb2, &cl_req, utimes_cb_3,
                                         utimes_data);
         if (next_pdu == NULL) {
-                utimes_data->cb(smb2, -ENOMEM, NULL, utimes_data->cb_data);
+                smb2_set_error(smb2, "Failed to create close command");
                 free(utimes_data);
                 smb2_free_pdu(smb2, pdu);
                 return -EINVAL;
