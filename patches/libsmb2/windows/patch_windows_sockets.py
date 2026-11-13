@@ -23,24 +23,19 @@ Touches: lib/socket.c, include/smb2/libsmb2.h
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
 """
-import sys
 import os
+import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("include/smb2/libsmb2.h", "#ifndef WIN32_LEAN_AND_MEAN"))
 
 
 def patch(relpath, pairs):
-    fn = os.path.join(root, relpath)
-    with open(fn) as f:
-        content = f.read()
     for old, new in pairs:
-        if old not in content:
-            print(f"ERROR: anchor not found in {relpath} (upstream drifted?):")
-            print(old)
-            sys.exit(1)
-        content = content.replace(old, new, 1)
-    with open(fn, "w") as f:
-        f.write(content)
+        p.replace(relpath, old, new)
 
 
 patch("lib/socket.c", [
@@ -75,4 +70,4 @@ patch("include/smb2/libsmb2.h", [
     ),
 ])
 
-print("Patched: t_socket handle widths + Winsock header hygiene (socket.c, libsmb2.h)")
+p.done("Patched: t_socket handle widths + Winsock header hygiene (socket.c, libsmb2.h)")

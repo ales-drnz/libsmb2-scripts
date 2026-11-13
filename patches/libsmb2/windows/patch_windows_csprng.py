@@ -36,24 +36,19 @@ Touches: lib/init.c
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
 """
-import sys
 import os
+import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("lib/init.c", "HAVE_BCRYPT_GENRANDOM"))
 
 
 def patch(relpath, pairs):
-    fn = os.path.join(root, relpath)
-    with open(fn) as f:
-        content = f.read()
     for old, new in pairs:
-        if old not in content:
-            print(f"ERROR: anchor not found in {relpath} (upstream drifted?):")
-            print(old)
-            sys.exit(1)
-        content = content.replace(old, new, 1)
-    with open(fn, "w") as f:
-        f.write(content)
+        p.replace(relpath, old, new)
 
 
 patch("lib/init.c", [
@@ -108,4 +103,4 @@ patch("lib/init.c", [
     ),
 ])
 
-print("Patched: BCryptGenRandom CSPRNG source in smb2_random_bytes (init.c)")
+p.done("Patched: BCryptGenRandom CSPRNG source in smb2_random_bytes (init.c)")

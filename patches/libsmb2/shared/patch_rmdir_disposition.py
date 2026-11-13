@@ -22,10 +22,11 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
-fn = os.path.join(root, "lib/libsmb2.c")
-with open(fn) as f:
-    content = f.read()
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("lib/libsmb2.c", 'patch_rmdir_disposition.py'))
 
 old = (
     "int\n"
@@ -155,11 +156,5 @@ smb2_rmdir_async(struct smb2_context *smb2, const char *path,
         return 0;
 }
 '''
-
-if content.count(old) != 1:
-    print("ERROR: smb2_rmdir_async anchor not found exactly once in lib/libsmb2.c (upstream drifted?)")
-    sys.exit(1)
-
-with open(fn, "w") as f:
-    f.write(content.replace(old, new, 1))
-print("Patched lib/libsmb2.c: rmdir sets FileDispositionInformation and reports its status")
+p.replace("lib/libsmb2.c", old, new)
+p.done("Patched lib/libsmb2.c: rmdir sets FileDispositionInformation and reports its status")

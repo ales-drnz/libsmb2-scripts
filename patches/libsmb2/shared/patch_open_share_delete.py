@@ -31,37 +31,14 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
 
-# Every edit is applied to an in-memory copy first and the files are written
-# only once all of them matched, so a drifted anchor leaves the tree as it
-# was instead of half-patched.
-files = {}
-
-
-def patch(relpath, old, new, count=1):
-    if relpath not in files:
-        with open(os.path.join(root, relpath)) as f:
-            files[relpath] = f.read()
-    content = files[relpath]
-    if content.count(old) != count:
-        print(
-            f"ERROR: anchor not found exactly {count} time(s) in {relpath} "
-            "(upstream drifted?)"
-        )
-        sys.exit(1)
-    files[relpath] = content.replace(old, new)
-
-
-# Already applied (a second run on the same tree): nothing to do.
-with open(os.path.join(root, "include/smb2/libsmb2.h")) as f:
-    if "SMB2_OPEN_SHARE_DELETE" in f.read():
-        print("Already patched: smb2_open2 / smb2_open2_async")
-        sys.exit(0)
-
+p = Patch(sys.argv[1], sentinel=("include/smb2/libsmb2.h", "SMB2_OPEN_SHARE_DELETE"))
 
 # ── include/smb2/libsmb2.h — public declarations ─────────────────────────────
-patch(
+p.replace(
     "include/smb2/libsmb2.h",
     "struct smb2fh *smb2_open(struct smb2_context *smb2, const char *path, int flags);\n",
     "struct smb2fh *smb2_open(struct smb2_context *smb2, const char *path, int flags);\n"
@@ -115,7 +92,7 @@ patch(
 )
 
 # ── lib/libsmb2.c — the flags are kept with the handle ───────────────────────
-patch(
+p.replace(
     "lib/libsmb2.c",
     "        char *path;\n"
     "        int flags;\n"
@@ -128,7 +105,7 @@ patch(
 )
 
 # The share access of an open, after open_flags_to_create_request().
-patch(
+p.replace(
     "lib/libsmb2.c",
     "/*\n"
     " * Follow at most this many links before giving up, so that a loop on the\n"
@@ -153,7 +130,7 @@ patch(
 )
 
 # The retry on a symlink asks for the same share access.
-patch(
+p.replace(
     "lib/libsmb2.c",
     "        open_flags_to_create_request(&req, fh->path, fh->flags,\n"
     "                                     SMB2_OPLOCK_LEVEL_NONE);\n",
@@ -163,7 +140,7 @@ patch(
 )
 
 # The helper every open goes through takes the flags.
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                smb2_command_cb cb, void *cb_data, void (*free_cb)(void *),\n"
     "                int caller_frees_pdu)\n"
@@ -172,7 +149,7 @@ patch(
     "                int caller_frees_pdu, uint32_t open2_flags)\n"
     "{\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "        fh->cb_data = cb_data;\n"
     "        fh->flags = flags;\n",
@@ -180,7 +157,7 @@ patch(
     "        fh->flags = flags;\n"
     "        fh->open2_flags = open2_flags;\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "        open_flags_to_create_request(&req, path, flags, oplock_level);\n",
     "        open_flags_to_create_request(&req, path, flags, oplock_level);\n"
@@ -188,12 +165,12 @@ patch(
 )
 
 # The opens there were pass no flag.
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                cb, cb_data, free_cb, 1);\n",
     "                cb, cb_data, free_cb, 1, 0);\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                cb, cb_data, NULL, 0);\n",
     "                cb, cb_data, NULL, 0, 0);\n",
@@ -201,7 +178,7 @@ patch(
 )
 
 # The new entry points, after smb2_open_async().
-patch(
+p.replace(
     "lib/libsmb2.c",
     "        pdu = _smb2_open_async_with_oplock_or_lease(smb2, path, flags,\n"
     "                SMB2_OPLOCK_LEVEL_NONE, 0, NULL,\n"
@@ -239,7 +216,7 @@ patch(
 )
 
 # ── lib/sync.c — sync wrapper, after smb2_open() ─────────────────────────────
-patch(
+p.replace(
     "lib/sync.c",
     "/*\n"
     " * close()\n"
@@ -283,7 +260,7 @@ patch(
 )
 
 # ── lib/libsmb2.syms — export list ───────────────────────────────────────────
-patch(
+p.replace(
     "lib/libsmb2.syms",
     "smb2_open\n",
     "smb2_open\n"
@@ -292,8 +269,4 @@ patch(
     "smb2_open2_async_pdu\n",
 )
 
-for relpath, content in files.items():
-    with open(os.path.join(root, relpath), "w") as f:
-        f.write(content)
-
-print("Patched: smb2_open2 / smb2_open2_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")
+p.done("Patched: smb2_open2 / smb2_open2_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")

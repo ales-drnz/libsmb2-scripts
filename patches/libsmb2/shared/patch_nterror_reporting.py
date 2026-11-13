@@ -26,13 +26,17 @@ smb2_timeout_pdus()); both anchor so that they apply in either order.
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
 """
-import sys
 import os
+import sys
 
-root = sys.argv[1]
-fn = os.path.join(root, "lib/libsmb2.c")
-with open(fn) as f:
-    content = f.read()
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(
+    sys.argv[1],
+    sentinel=("lib/pdu.c", 'smb2_set_nterror(smb2, SMB2_STATUS_IO_TIMEOUT, "%s",'),
+)
 
 replacements = [
     # Generic open/create callback: use set_nterror so the NT status survives.
@@ -46,20 +50,9 @@ replacements = [
 ]
 
 for old, new in replacements:
-    if content.count(old) != 1:
-        print("ERROR: anchor not found exactly once in lib/libsmb2.c (upstream drifted?):")
-        print(old)
-        sys.exit(1)
-    content = content.replace(old, new, 1)
-
-with open(fn, "w") as f:
-    f.write(content)
+    p.replace("lib/libsmb2.c", old, new)
 
 # lib/pdu.c: the timeout sweep, outqueue and waitqueue.
-fn = os.path.join(root, "lib/pdu.c")
-with open(fn) as f:
-    content = f.read()
-
 old = (
     "                        pdu->cb(smb2, SMB2_STATUS_IO_TIMEOUT, NULL,\n"
     "                                pdu->cb_data);\n"
@@ -69,11 +62,6 @@ new = (
     "                                         nterror_to_str(SMB2_STATUS_IO_TIMEOUT));\n"
     + old
 )
-if content.count(old) != 2:
-    print("ERROR: the two timeout callbacks of smb2_timeout_pdus() not found in lib/pdu.c (upstream drifted?)")
-    sys.exit(1)
-content = content.replace(old, new)
+p.replace("lib/pdu.c", old, new, count=2)
 
-with open(fn, "w") as f:
-    f.write(content)
-print("Patched lib/libsmb2.c, lib/pdu.c: NT status recorded on create failures and timeouts")
+p.done("Patched lib/libsmb2.c, lib/pdu.c: NT status recorded on create failures and timeouts")

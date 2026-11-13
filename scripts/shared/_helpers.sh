@@ -63,7 +63,9 @@ extract_tarball() {
 #      applied per-build so the cache stays pristine.
 #   3. Installs the static config header (scripts/shared/config/config.h).
 #   4. Runs every patches/libsmb2/shared/patch_*.py, then the platform
-#      overlay patches/libsmb2/$PATCH_PLATFORM/patch_*.py when set.
+#      overlay patches/libsmb2/$PATCH_PLATFORM/patch_*.py when set. The tree
+#      is fresh, so LIBSMB2_PATCH_FRESH=1 makes a patch that finds itself
+#      already applied an error (see patches/_patchlib.py).
 #
 # Requires _versions.sh to be sourced first. Sets SMB2_SRC to the patched
 # source root on return.
@@ -91,7 +93,7 @@ prepare_libsmb2_sources() {
     for p in "$dir"/patch_*.py; do
       [ -e "$p" ] || continue
       echo "  Applying $(basename "$p")..."
-      python3 "$p" "$SMB2_SRC"
+      LIBSMB2_PATCH_FRESH=1 python3 "$p" "$SMB2_SRC"
     done
   done
 }

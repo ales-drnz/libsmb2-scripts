@@ -14,13 +14,14 @@ Standard EINTR retry loop; every other poll() failure still errors out.
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
 """
-import sys
 import os
+import sys
 
-root = sys.argv[1]
-fn = os.path.join(root, "lib/sync.c")
-with open(fn) as f:
-    content = f.read()
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("lib/sync.c", 'prc = poll(&pfd, 1, 1000);'))
 
 old = (
     "\t\tif (poll(&pfd, 1, 1000) < 0) {\n"
@@ -40,11 +41,5 @@ new = (
     "\t\t\t}\n"
     "\t\t}\n"
 )
-
-if old not in content:
-    print("ERROR: poll() anchor not found in lib/sync.c (upstream drifted?)")
-    sys.exit(1)
-
-with open(fn, "w") as f:
-    f.write(content.replace(old, new, 1))
-print("Patched lib/sync.c: poll() retries on EINTR")
+p.replace("lib/sync.c", old, new)
+p.done("Patched lib/sync.c: poll() retries on EINTR")

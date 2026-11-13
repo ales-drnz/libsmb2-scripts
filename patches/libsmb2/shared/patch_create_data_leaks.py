@@ -25,10 +25,11 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
-fn = os.path.join(root, "lib/libsmb2.c")
-with open(fn) as f:
-    content = f.read()
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("lib/libsmb2.c", "patch_create_data_leaks.py"))
 
 fixes = [
     # smb2_unlink_internal() and smb2_mkdir_async(): the CREATE.
@@ -94,12 +95,6 @@ fixes = [
 ]
 
 for old, new, count in fixes:
-    if content.count(old) != count:
-        print(f"ERROR: anchor not found {count} time(s) in lib/libsmb2.c (upstream drifted?):")
-        print(old)
-        sys.exit(1)
-    content = content.replace(old, new)
+    p.replace("lib/libsmb2.c", old, new, count)
 
-with open(fn, "w") as f:
-    f.write(content)
-print("Patched lib/libsmb2.c: unlink, mkdir, ftruncate, pread and pwrite free their call data when the first PDU fails")
+p.done("Patched lib/libsmb2.c: unlink, mkdir, ftruncate, pread and pwrite free their call data when the first PDU fails")

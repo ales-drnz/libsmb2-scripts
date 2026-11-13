@@ -35,12 +35,12 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
 
 # lib/pdu.c: the timeout sweep of the outqueue.
-fn = os.path.join(root, "lib/pdu.c")
-with open(fn) as f:
-    content = f.read()
+p = Patch(sys.argv[1], sentinel=("lib/pdu.c", "patch_compound_callbacks.py"))
 
 # Anchored from the outqueue's SMB2_LIST_REMOVE to the head's callback
 # rather than on the two lines together: patch_nterror_reporting.py puts
@@ -66,15 +66,12 @@ loop = (
     "                                }\n"
     "                        }\n"
 )
+content = p.text("lib/pdu.c")
 if content.count(remove) != 1 or content.count(head_cb) != 2:
-    print("ERROR: outqueue timeout anchor not found in lib/pdu.c (upstream drifted?)")
-    sys.exit(1)
+    p.fail("outqueue timeout anchor not found in lib/pdu.c (upstream drifted?)")
 at = content.index(head_cb, content.index(remove))
 if "SMB2_LIST_REMOVE(&smb2->waitqueue" in content[content.index(remove):at]:
-    print("ERROR: outqueue timeout callback not found in lib/pdu.c (upstream drifted?)")
-    sys.exit(1)
-at += len(head_cb)
-with open(fn, "w") as f:
-    f.write(content[:at] + loop + content[at:])
+    p.fail("outqueue timeout callback not found in lib/pdu.c (upstream drifted?)")
+p.insert_at("lib/pdu.c", at + len(head_cb), loop)
 
-print("Patched lib/pdu.c: an unsent compound calls every PDU's callback on timeout")
+p.done("Patched lib/pdu.c: an unsent compound calls every PDU's callback on timeout")

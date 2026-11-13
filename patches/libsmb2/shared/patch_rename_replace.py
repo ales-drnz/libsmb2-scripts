@@ -29,34 +29,14 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
 
-# Every edit is applied to an in-memory copy first and the files are written
-# only once all of them matched, so a drifted anchor leaves the tree as it
-# was instead of half-patched.
-files = {}
-
-
-def patch(relpath, old, new):
-    if relpath not in files:
-        with open(os.path.join(root, relpath)) as f:
-            files[relpath] = f.read()
-    content = files[relpath]
-    if content.count(old) != 1:
-        print(f"ERROR: anchor not found exactly once in {relpath} (upstream drifted?)")
-        sys.exit(1)
-    files[relpath] = content.replace(old, new, 1)
-
-
-# Already applied (a second run on the same tree): nothing to do.
-with open(os.path.join(root, "include/smb2/libsmb2.h")) as f:
-    if "SMB2_RENAME_REPLACE_IF_EXISTS" in f.read():
-        print("Already patched: smb2_rename2 / smb2_rename2_async")
-        sys.exit(0)
-
+p = Patch(sys.argv[1], sentinel=("include/smb2/libsmb2.h", "SMB2_RENAME_REPLACE_IF_EXISTS"))
 
 # ── include/smb2/libsmb2.h — public declarations ─────────────────────────────
-patch(
+p.replace(
     "include/smb2/libsmb2.h",
     "int smb2_rename(struct smb2_context *smb2, const char *oldpath,\n"
     "                const char *newpath);\n",
@@ -97,7 +77,7 @@ patch(
 )
 
 # ── lib/libsmb2.c — replace_if_exist through smb2_new_name_async ─────────────
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                    const char *newpath, uint8_t file_info_class,\n"
     "                    uint32_t desired_access,\n"
@@ -106,17 +86,17 @@ patch(
     "                    uint32_t desired_access, uint8_t replace_if_exist,\n"
     "                    smb2_command_cb cb, void *cb_data)\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                ln_info.replace_if_exist = 0;\n",
     "                ln_info.replace_if_exist = replace_if_exist;\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                rn_info.replace_if_exist = 0;\n",
     "                rn_info.replace_if_exist = replace_if_exist;\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "int\n"
     "smb2_rename_async(struct smb2_context *smb2, const char *oldpath,\n"
@@ -150,7 +130,7 @@ patch(
     "        return smb2_rename2_async(smb2, oldpath, newpath, 0, cb, cb_data);\n"
     "}\n",
 )
-patch(
+p.replace(
     "lib/libsmb2.c",
     "                                   SMB2_FILE_LINK_INFORMATION,\n"
     "                                   SMB2_FILE_READ_ATTRIBUTES,\n"
@@ -196,7 +176,7 @@ int smb2_rename2(struct smb2_context *smb2, const char *oldpath,
 # ── lib/sync.c — sync wrapper, before smb2_symlink() ─────────────────────────
 # Inserted at an anchor rather than appended, so the tree is the same
 # whichever order the patches run in (patch_utimes.py appends).
-patch(
+p.replace(
     "lib/sync.c",
     "int smb2_symlink(struct smb2_context *smb2, const char *target,\n",
     SYNC_IMPL.lstrip("\n") + "\n"
@@ -204,14 +184,10 @@ patch(
 )
 
 # ── lib/libsmb2.syms — export list ───────────────────────────────────────────
-patch(
+p.replace(
     "lib/libsmb2.syms",
     "smb2_rename_async\n",
     "smb2_rename_async\nsmb2_rename2\nsmb2_rename2_async\n",
 )
 
-for relpath, content in files.items():
-    with open(os.path.join(root, relpath), "w") as f:
-        f.write(content)
-
-print("Patched: smb2_rename2 / smb2_rename2_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")
+p.done("Patched: smb2_rename2 / smb2_rename2_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")

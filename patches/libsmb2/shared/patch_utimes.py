@@ -22,25 +22,17 @@ Touches:
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
 """
-import sys
 import os
+import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
 
-
-def patch(relpath, old, new, count=1):
-    fn = os.path.join(root, relpath)
-    with open(fn) as f:
-        content = f.read()
-    if old not in content:
-        print(f"ERROR: anchor not found in {relpath} (upstream drifted?)")
-        sys.exit(1)
-    with open(fn, "w") as f:
-        f.write(content.replace(old, new, count))
-
+p = Patch(sys.argv[1], sentinel=("include/smb2/libsmb2.h", "smb2_utimes_async"))
 
 # ── include/smb2/libsmb2.h — public declarations ─────────────────────────────
-patch(
+p.replace(
     "include/smb2/libsmb2.h",
     "int smb2_ftruncate(struct smb2_context *smb2, struct smb2fh *fh,\n"
     "                   uint64_t length);\n",
@@ -224,7 +216,7 @@ smb2_utimes_async(struct smb2_context *smb2, const char *path,
 
 """
 
-patch(
+p.replace(
     "lib/libsmb2.c",
     "/* *new_name* is used for both renaming and creating hard links */\n",
     UTIMES_IMPL + "/* *new_name* is used for both renaming and creating hard links */\n",
@@ -264,21 +256,15 @@ int smb2_utimes(struct smb2_context *smb2, const char *path,
 }
 """
 
-fn = os.path.join(root, "lib/sync.c")
-with open(fn) as f:
-    sync_src = f.read()
 for needed in ("sync_generic_status_cb", "wait_for_reply"):
-    if needed not in sync_src:
-        print(f"ERROR: lib/sync.c no longer has {needed} (upstream drifted?)")
-        sys.exit(1)
-with open(fn, "a") as f:
-    f.write(SYNC_IMPL)
+    p.require("lib/sync.c", needed)
+p.append("lib/sync.c", SYNC_IMPL)
 
 # ── lib/libsmb2.syms — export list ───────────────────────────────────────────
-patch(
+p.replace(
     "lib/libsmb2.syms",
     "smb2_truncate_async\n",
     "smb2_truncate_async\nsmb2_utimes\nsmb2_utimes_async\n",
 )
 
-print("Patched: smb2_utimes / smb2_utimes_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")
+p.done("Patched: smb2_utimes / smb2_utimes_async added (libsmb2.h, libsmb2.c, sync.c, libsmb2.syms)")

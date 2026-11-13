@@ -25,10 +25,11 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
-fn = os.path.join(root, "lib/libsmb2.c")
-with open(fn) as f:
-    content = f.read()
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("lib/libsmb2.c", "patch_unlink_mkdir_status.py"))
 
 fixes = [
     # The call data: the first failing status.
@@ -89,12 +90,6 @@ fixes = [
 ]
 
 for old, new in fixes:
-    if content.count(old) != 1:
-        print("ERROR: anchor not found exactly once in lib/libsmb2.c (upstream drifted?):")
-        print(old)
-        sys.exit(1)
-    content = content.replace(old, new, 1)
+    p.replace("lib/libsmb2.c", old, new)
 
-with open(fn, "w") as f:
-    f.write(content)
-print("Patched lib/libsmb2.c: unlink and mkdir report the first failing status of their compound")
+p.done("Patched lib/libsmb2.c: unlink and mkdir report the first failing status of their compound")

@@ -33,7 +33,9 @@ import os
 import re
 import sys
 
-root = sys.argv[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
 
 release = os.environ.get("LIBSMB2_RELEASE", "")
 if not re.fullmatch(r"r\d+", release):
@@ -56,34 +58,18 @@ const char *smb2_scripts_release(void)
 
 # Already applied (a second run on the same tree): nothing to do, unless it
 # was applied for another release.
-with open(os.path.join(root, "include/smb2/libsmb2.h")) as f:
-    if "smb2_scripts_release" in f.read():
-        with open(os.path.join(root, SOURCE_PATH)) as f:
-            if f.read() != SOURCE:
-                print(f"ERROR: tree already patched for another release than {release}")
-                sys.exit(1)
-        print("Already patched: smb2_scripts_release")
-        sys.exit(0)
-
-# Every edit is applied to an in-memory copy first and the files are written
-# only once all of them matched, so a drifted anchor leaves the tree as it
-# was instead of half-patched.
-files = {}
-
-
-def patch(relpath, old, new):
-    if relpath not in files:
-        with open(os.path.join(root, relpath)) as f:
-            files[relpath] = f.read()
-    content = files[relpath]
-    if content.count(old) != 1:
-        print(f"ERROR: anchor not found exactly once in {relpath} (upstream drifted?)")
-        sys.exit(1)
-    files[relpath] = content.replace(old, new, 1)
-
+p = Patch(
+    sys.argv[1],
+    sentinel=("include/smb2/libsmb2.h", "smb2_scripts_release"),
+    exit_if_applied=False,
+)
+if p.applied:
+    if p.on_disk(SOURCE_PATH) != SOURCE:
+        p.fail(f"tree already patched for another release than {release}")
+    p.exit_applied()
 
 # ── include/smb2/libsmb2.h — public declaration, before smb2_init_context ────
-patch(
+p.replace(
     "include/smb2/libsmb2.h",
     "/*\n"
     " * Create an SMB2 context.\n",
@@ -99,19 +85,12 @@ patch(
 )
 
 # ── lib/libsmb2.syms — export list, kept in byte order ───────────────────────
-patch(
+p.replace(
     "lib/libsmb2.syms",
     "\nsmb2_seekdir\n",
     "\nsmb2_scripts_release\nsmb2_seekdir\n",
 )
 
-if os.path.exists(os.path.join(root, SOURCE_PATH)):
-    print(f"ERROR: {SOURCE_PATH} already exists (upstream drifted?)")
-    sys.exit(1)
-files[SOURCE_PATH] = SOURCE
+p.create(SOURCE_PATH, SOURCE)
 
-for relpath, content in files.items():
-    with open(os.path.join(root, relpath), "w") as f:
-        f.write(content)
-
-print(f"Patched: smb2_scripts_release() returns \"{release}\" (libsmb2.h, smb2-scripts-release.c, libsmb2.syms)")
+p.done(f"Patched: smb2_scripts_release() returns \"{release}\" (libsmb2.h, smb2-scripts-release.c, libsmb2.syms)")

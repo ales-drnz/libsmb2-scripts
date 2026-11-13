@@ -42,10 +42,11 @@ under libsmb2's LGPL-2.1-or-later.
 import os
 import sys
 
-root = sys.argv[1]
-fn = os.path.join(root, "lib/libsmb2.c")
-with open(fn) as f:
-    content = f.read()
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _patchlib import Patch  # noqa: E402
+
+p = Patch(sys.argv[1], sentinel=("lib/libsmb2.c", 'patch_unlink_non_directory.py'))
 
 old = (
     "        cr_req.create_options = SMB2_FILE_DELETE_ON_CLOSE |\n"
@@ -66,11 +67,5 @@ new = (
     "\n"
     "        pdu = smb2_cmd_create_async(smb2, &cr_req, create_cb_1, create_data);\n"
 )
-
-if content.count(old) != 1:
-    print("ERROR: smb2_unlink_internal create_options anchor not found exactly once in lib/libsmb2.c (upstream drifted?)")
-    sys.exit(1)
-
-with open(fn, "w") as f:
-    f.write(content.replace(old, new, 1))
-print("Patched lib/libsmb2.c: unlink opens with FILE_NON_DIRECTORY_FILE")
+p.replace("lib/libsmb2.c", old, new)
+p.done("Patched lib/libsmb2.c: unlink opens with FILE_NON_DIRECTORY_FILE")
