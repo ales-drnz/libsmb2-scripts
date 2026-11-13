@@ -152,7 +152,7 @@ build_libcrypto() {
   mkdir -p "$out"
   echo "  Configuring OpenSSL ${OPENSSL_VERSION} ($target)..."
   (
-    cd "$out"
+    cd "$out" || exit 1
     export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1767225600}"
     perl "$OPENSSL_SRC/Configure" "$target" \
       "${OPENSSL_CONFIGURE_OPTIONS[@]}" "$@" > configure.log 2>&1 \
@@ -162,6 +162,7 @@ build_libcrypto() {
       && make -j"$jobs" libcrypto.a >> build.log 2>&1 \
       || { tail -n 60 build.log >&2; exit 1; }
   )
+  # shellcheck disable=SC2034  # read by the build scripts that source this
   OPENSSL_INCLUDES=("-I$out/include" "-I$OPENSSL_SRC/include")
   LIBCRYPTO="$out/libcrypto.a"
   [ -f "$LIBCRYPTO" ] || { echo "error: $LIBCRYPTO was not built" >&2; return 1; }
@@ -203,6 +204,7 @@ libsmb2_sources() {
   # ELF links (Linux, Android): the relocations are resolved at load time
   # and the GOT made read-only after it (full RELRO), and a symbol that
   # nothing linked defines stops the link instead of the first call.
+  # shellcheck disable=SC2034,SC2054  # read by the Linux and Android scripts; the commas are the linker's -Wl syntax, not separators
   LIBSMB2_ELF_LDFLAGS=(-Wl,-z,relro,-z,now -Wl,--no-undefined)
 }
 
@@ -213,14 +215,14 @@ libsmb2_sources() {
 # bash 3.2 that macOS ships does not have.
 compile_objects() {
   local out="$1"; shift
-  local cc=()
-  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do cc+=("$1"); shift; done
+  local compiler=()
+  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do compiler+=("$1"); shift; done
   [ "$#" -gt 0 ] && shift
   local jobs="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)}"
   mkdir -p "$out"
   local pids=() status=0 src pid
   for src in "${SOURCES[@]}"; do
-    "${cc[@]}" -c "$src" "${LIBSMB2_INCLUDES[@]}" "${LIBSMB2_CFLAGS[@]}" "$@" \
+    "${compiler[@]}" -c "$src" "${LIBSMB2_INCLUDES[@]}" "${LIBSMB2_CFLAGS[@]}" "$@" \
       -o "$out/$(basename "${src%.c}").o" &
     pids+=($!)
     if [ "${#pids[@]}" -ge "$jobs" ]; then
@@ -281,11 +283,11 @@ info['AvailableLibraries'].sort(key=lambda lib: lib['LibraryIdentifier'])
 with open(path, 'wb') as f:
     plistlib.dump(info, f, sort_keys=True)
 PY
-  rm -rf "$dir/licenses" "$dir/$name"
+  rm -rf "$dir/licenses" "${dir:?}/${name:?}"
   mkdir -p "$dir/licenses"
   cp -R "$LIBSMB2_SCRIPTS_ROOT/licenses/libsmb2" "$LIBSMB2_SCRIPTS_ROOT/licenses/openssl" "$dir/licenses/"
   (
-    cd "$dir"
+    cd "$dir" || exit 1
     find libsmb2.xcframework licenses -exec env TZ=UTC touch -h -t "$stamp" {} +
     find libsmb2.xcframework licenses | LC_ALL=C sort \
       | TZ=UTC zip -X -y -q "$name" -@

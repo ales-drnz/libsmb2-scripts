@@ -7,6 +7,10 @@ name: Build
 # Publishing the libsmb2-<release> GitHub release on dart_smb2 stays a manual
 # step.
 #
+# The lint job builds no library: it checks the orchestrator (gofmt, go vet,
+# go test), the shell scripts (ShellCheck) and the patch set
+# (scripts/check_patches.sh), with the Go and ShellCheck of the runner image.
+#
 # Every build also builds OpenSSL's libcrypto, whose Configure needs perl and
 # make: the Linux and Windows images install them, and GitHub's ubuntu and
 # macOS images (the Android and Apple jobs) already have both.
@@ -31,6 +35,32 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Orchestrator (gofmt, go vet, go test)
+        working-directory: tui
+        run: |
+          go version
+          unformatted="$(gofmt -l .)"
+          test -z "$unformatted" || { echo "::error::gofmt: $unformatted"; exit 1; }
+          go vet ./...
+          go test ./...
+      # Warnings and errors; the notes (A && B || C, a variable set in a
+      # subshell) describe what the scripts mean to do.
+      - name: Shell scripts (ShellCheck)
+        run: |
+          shellcheck --version
+          shellcheck --shell=bash --severity=warning -x -P scripts \
+            build scripts/*.sh scripts/shared/*.sh
+      # Every patch applies to the pinned tree in either order, a second run
+      # changes nothing, and the files they touch compile with warnings on.
+      - name: Patch set
+        run: bash scripts/check_patches.sh
+
   linux:
     name: Linux
     runs-on: ubuntu-24.04
@@ -113,6 +143,19 @@ jobs:
           xcodebuild -version | grep -qx 'Build version 17F113'
       - name: Build
         run: bash ${{ matrix.script }}
+      # verify_binaries.sh runs on Linux and only reads the Mach-O headers:
+      # this is where the macOS library is loaded (the runner's own slice),
+      # every symbol dart_smb2 binds resolved and a context created.
+      - name: Load the macOS library
+        if: matrix.name == 'macOS'
+        run: |
+          source scripts/shared/_versions.sh
+          work="$(mktemp -d)"
+          unzip -q "${{ matrix.output }}" -d "$work"
+          lib="$(echo "$work"/libsmb2.xcframework/*/libsmb2.framework/Versions/A/libsmb2)"
+          test -f "$lib" || { echo "::error::no macOS library in the xcframework"; exit 1; }
+          cc -O0 verify/dlopen_test.c -o "$work/dlopen_test"
+          "$work/dlopen_test" "$lib" verify/symbols.txt "$LIBSMB2_RELEASE"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.name }}
