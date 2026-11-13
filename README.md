@@ -198,10 +198,11 @@ These variables are passed to the builds:
 | `JOBS=N` | parallel compile jobs, all cores by default |
 | `FORCE_DOWNLOAD=1` | download the libsmb2 and OpenSSL tarballs again |
 | `KEEP_BUILD=1` | keep the build folders |
+| `LIBSMB2_RELEASE=rN` and the other pins of `scripts/shared/_versions.sh`, `SOURCE_DATE_EPOCH` | override that pin, in the Docker builds as in the native ones |
 
 #### 3.5 On GitHub Actions
 
-Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31.
+Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31. The macOS job loads the library it has built the same way. A `lint` job builds nothing: it runs `gofmt`, `go vet` and `go test` on the orchestrator, ShellCheck on the scripts, and `scripts/check_patches.sh`.
 
 ---
 
@@ -250,7 +251,7 @@ Each build downloads the pinned tarballs and checks their SHA-256, extracts a fr
 
 #### 5.1 The patch set
 
-Every patch is a Python script with a docstring that says why it exists. It finds its place by exact text and stops the build when upstream has changed underneath it. The build applies them in alphabetical order, but none depends on that: any order gives the same tree.
+Every patch is a Python script with a docstring that says why it exists. It finds its place by exact text and stops the build when upstream has changed underneath it. The build applies them in alphabetical order, but none depends on that: any order gives the same tree. They all edit through `patches/_patchlib.py`: a patch writes nothing unless every one of its anchors matched the number of times it expects, and one run again on a tree it has already patched says so and leaves it alone. `scripts/check_patches.sh` checks all of that against the pinned tree without building a library, and compiles the files the patches touch with warnings on.
 
 | Patch | Scope | What it does |
 | :--- | :--- | :--- |
@@ -290,7 +291,8 @@ Links to directories: `unlink` opens the link itself (`FILE_OPEN_REPARSE_POINT`)
 - **macOS and iOS are greyed out**: they need a Mac with Xcode. GitHub Actions can build them instead.
 - **The first Docker build is slow**: it is building the image; later builds reuse it until `docker/Dockerfile` changes.
 - **"libsmb2 tarball SHA-256 mismatch"** or **"OpenSSL tarball SHA-256 mismatch"**: the cached download is stale or corrupt. Delete `sources/cache/` and build again.
-- **A patch fails with "anchor not found"**: upstream moved under the patch after a bump. Update the anchor in the named `patch_*.py`.
+- **A patch fails with "anchor found 0 time(s) instead of 1"**: upstream moved under the patch after a bump. Update the anchor in the named `patch_*.py`; `scripts/check_patches.sh` tries them all in a few seconds.
+- **A patch fails with "already has the patch's sentinel"**: the text the patch recognises itself by is in the tree before it ran, so upstream now has it (drop or rework the patch) or another patch adds it.
 - **"perl not found"** or **"make not found"** on Android: install them with the system's package manager; OpenSSL's `Configure` needs both.
 - **"Android NDK 28.2.13676358 not found"** or **"the build is pinned to"**: install that NDK with the SDK Manager, set `NDK_HOME`, or build with `ALLOW_ANY_NDK=1`.
 - **"N of the 9 release assets"** from the manifest: `release_builds/` lacks some libraries. Build them, take the CI artifact, or use `ALLOW_PARTIAL=1` for a manifest that is not a release.
