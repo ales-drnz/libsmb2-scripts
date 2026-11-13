@@ -26,7 +26,6 @@ var (
 	cInfo    = lipgloss.Color("#7DCFFF") // cyan (info)
 	cFail    = lipgloss.Color("#F7768E") // red
 	cRun     = lipgloss.Color("#7AA2F7") // running — blue
-	cCancel  = lipgloss.Color("#FF9E64") // orange
 	cBorder  = lipgloss.Color("#3B4261") // panel borders
 	cSel     = lipgloss.Color("#283457") // selection background
 	cSelText = lipgloss.Color("#FFFFFF") // near-white on selection
