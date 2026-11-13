@@ -165,6 +165,7 @@ build_abi() {
     -Wl,--version-script="$BUILD_DIR/exports.ver" \
     -Wl,--build-id=none \
     -Wl,--gc-sections \
+    "${LIBSMB2_ELF_LDFLAGS[@]}" \
     -Wl,--as-needed
 
   local output="$OUTPUT_DIR/libsmb2_android-${abi}.so"

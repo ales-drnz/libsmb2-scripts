@@ -187,7 +187,21 @@ libsmb2_sources() {
   )
   # -w: upstream's own warnings (mostly unused parameters) are not ours to
   # fix and would bury anything the patches introduce in the build log.
-  LIBSMB2_CFLAGS=(-O2 -DHAVE_CONFIG_H=1 -fPIC -w)
+  #
+  # Hardening: libsmb2 parses what a server it does not trust sends.
+  # -fstack-protector-strong puts a canary in every function with an array
+  # or an address taken, and _FORTIFY_SOURCE=2 (which needs -O2) checks the
+  # memcpy / strcpy family against the sizes the compiler knows. The -U
+  # comes first because some compilers (Ubuntu's gcc) define it already.
+  # One section per function and per object lets the links' --gc-sections
+  # / -dead_strip drop what nothing references.
+  LIBSMB2_CFLAGS=(-O2 -DHAVE_CONFIG_H=1 -fPIC -w
+    -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2
+    -ffunction-sections -fdata-sections)
+  # ELF links (Linux, Android): the relocations are resolved at load time
+  # and the GOT made read-only after it (full RELRO), and a symbol that
+  # nothing linked defines stops the link instead of the first call.
+  LIBSMB2_ELF_LDFLAGS=(-Wl,-z,relro,-z,now -Wl,--no-undefined)
 }
 
 # compile_objects <out_dir> <cc...> -- <flags...>

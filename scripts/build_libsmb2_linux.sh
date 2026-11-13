@@ -97,6 +97,7 @@ build_arch() {
     -Wl,--version-script="$BUILD_DIR/exports.ver" \
     -Wl,--build-id=none \
     -Wl,--gc-sections \
+    "${LIBSMB2_ELF_LDFLAGS[@]}" \
     -pthread
 
   local output="$OUTPUT_DIR/libsmb2_linux-${arch}.so"
