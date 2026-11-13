@@ -258,6 +258,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir`, `ftruncate`, `pread` and `pwrite` when their first request cannot be built |
 | `patch_nterror_reporting.py` | shared | records the NT status on open and timeout failures |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
+| `patch_read_write_eof.py` | shared | makes `pread` and `pwrite` report 0 at end of file without reading the error reply as a read or write reply |
 | `patch_rename_replace.py` | shared | adds `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, behind `dart_smb2`'s `rename(..., overwrite: true)` |
 | `patch_scripts_release.py` | shared | adds `smb2_scripts_release()`, which returns the release the library was built as (`LIBSMB2_RELEASE`, e.g. `"r11"`), so `dart_smb2` refuses a libsmb2 of another release or of upstream |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
