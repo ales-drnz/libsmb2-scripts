@@ -262,6 +262,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | `patch_rename_replace.py` | shared | adds `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, behind `dart_smb2`'s `rename(..., overwrite: true)` |
 | `patch_scripts_release.py` | shared | adds `smb2_scripts_release()`, which returns the release the library was built as (`LIBSMB2_RELEASE`, e.g. `"r11"`), so `dart_smb2` refuses a libsmb2 of another release or of upstream |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
+| `patch_timestamps_before_epoch.py` | shared | gives a time before 1970, such as the 0 of a time the server does not keep, as 0 instead of a date far in the future |
 | `patch_truncate_non_directory.py` | shared | makes `truncate` fail on a directory |
 | `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory, and so on a link to one (see below) |
 | `patch_unlink_mkdir_status.py` | shared | makes `unlink` and `mkdir` report the first failure of their CREATE + CLOSE, with its NT status |
