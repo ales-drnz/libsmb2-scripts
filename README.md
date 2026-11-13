@@ -255,7 +255,7 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | Patch | Scope | What it does |
 | :--- | :--- | :--- |
 | `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out before it is sent, so rmdir, unlink and the other path calls report the timeout |
-| `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir` and `ftruncate` when their first request cannot be built |
+| `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir`, `ftruncate`, `pread` and `pwrite` when their first request cannot be built |
 | `patch_nterror_reporting.py` | shared | records the NT status on open and timeout failures |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
 | `patch_rename_replace.py` | shared | adds `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, behind `dart_smb2`'s `rename(..., overwrite: true)` |
