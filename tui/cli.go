@@ -7,6 +7,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 )
 
 // runCLI runs targets headlessly (no TUI), streaming output straight to the
@@ -32,9 +35,24 @@ func runCLI(args []string, ctx *buildCtx) int {
 	for _, s := range skipped {
 		fmt.Printf("\x1b[2m- skip %s\x1b[0m\n", s)
 	}
+	// Ctrl-C reaches the docker client, not the build in its container:
+	// stop that too before leaving.
+	var mu sync.Mutex
+	container := ""
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		mu.Lock()
+		killContainer(container)
+		os.Exit(130)
+	}()
 	for _, t := range targets {
 		fmt.Printf("\n\x1b[1;36m▶ %s\x1b[0m\n", t.fullLabel())
-		cmd := ctx.command(t)
+		cmd, name := ctx.command(t)
+		mu.Lock()
+		container = name
+		mu.Unlock()
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin

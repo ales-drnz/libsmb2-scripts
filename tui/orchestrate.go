@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // buildCtx holds the resolved paths the build commands need. It replaces the
@@ -102,40 +103,70 @@ func (c *buildCtx) knobEnv() []string {
 	return env
 }
 
-// command builds the *exec.Cmd for one concrete (non-aggregate) target.
-func (c *buildCtx) command(t Target) *exec.Cmd {
+// containerSeq numbers the containers of this process.
+var containerSeq atomic.Uint64
+
+// containerName returns a name no other container has, for the `docker run`
+// of one target: the abort kills the container by it. The PID tells two
+// orchestrators apart, the counter two runs of the same target.
+func containerName(t Target) string {
+	return fmt.Sprintf("libsmb2-build-%s-%d-%d", t.Key, os.Getpid(), containerSeq.Add(1))
+}
+
+// dockerRunArgs returns the `docker run` arguments of a kDocker target in a
+// container called name. --init puts a small init at PID 1, which reaps
+// what the build leaves behind and passes signals on; bash at PID 1 would
+// ignore them.
+func (c *buildCtx) dockerRunArgs(t Target, name string) []string {
+	args := append([]string{"run", "--rm", "--init", "--name", name}, dockerPlatform(t.image)...)
+	// Run as the calling user, so release_builds/ stays theirs.
+	if hostOS != "windows" {
+		args = append(args, "-u", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
+	}
+	for _, kv := range append(c.knobEnv(), t.env...) {
+		args = append(args, "-e", kv)
+	}
+	return append(args,
+		"-v", c.scriptsRoot+":/scripts",
+		"-w", "/scripts",
+		c.imageRef(t.image),
+		"bash", "./"+t.script,
+	)
+}
+
+// killContainer stops a container started by command, and with it every
+// process of the build inside. Killing the `docker run` client alone leaves
+// the container running: the build went on writing into the build
+// directory that the next run starts by removing.
+func killContainer(name string) {
+	if name == "" {
+		return
+	}
+	_ = exec.Command("docker", "kill", name).Run()
+}
+
+// command builds the *exec.Cmd for one concrete (non-aggregate) target, and
+// returns the name of the container it runs in ("" when it runs in none).
+func (c *buildCtx) command(t Target) (*exec.Cmd, string) {
 	switch t.kind {
 	case kImage:
 		args := append([]string{"build"}, dockerPlatform(t.image)...)
 		args = append(args, "--target", t.image, "-t", c.imageRef(t.image), "./docker/")
 		cmd := exec.Command("docker", args...)
 		cmd.Dir = c.scriptsRoot
-		return cmd
+		return cmd, ""
 
 	case kDocker:
-		args := append([]string{"run", "--rm"}, dockerPlatform(t.image)...)
-		// Run as the calling user, so release_builds/ stays theirs.
-		if hostOS != "windows" {
-			args = append(args, "-u", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
-		}
-		for _, kv := range append(c.knobEnv(), t.env...) {
-			args = append(args, "-e", kv)
-		}
-		args = append(args,
-			"-v", c.scriptsRoot+":/scripts",
-			"-w", "/scripts",
-			c.imageRef(t.image),
-			"bash", "./"+t.script,
-		)
-		cmd := exec.Command("docker", args...)
+		name := containerName(t)
+		cmd := exec.Command("docker", c.dockerRunArgs(t, name)...)
 		cmd.Dir = c.scriptsRoot
-		return cmd
+		return cmd, name
 
 	default: // kNative
 		cmd := exec.Command("bash", "./"+t.script)
 		cmd.Dir = c.scriptsRoot
 		cmd.Env = append(os.Environ(), append(c.knobEnv(), t.env...)...)
-		return cmd
+		return cmd, ""
 	}
 }
 

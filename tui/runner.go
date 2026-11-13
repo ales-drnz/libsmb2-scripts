@@ -15,8 +15,9 @@ import (
 // runner executes one target's command, streaming lines back into the TUI
 // through the program's message loop.
 type runner struct {
-	mu  sync.Mutex
-	cmd *exec.Cmd
+	mu        sync.Mutex
+	cmd       *exec.Cmd
+	container string // the container cmd runs in, "" for a native build
 }
 
 type lineMsg struct {
@@ -33,9 +34,10 @@ type doneMsg struct {
 // then a doneMsg. It must be used with tea.Program.Send (the goroutine
 // outlives the returned Cmd).
 func (r *runner) start(p *tea.Program, ctx *buildCtx, t Target) {
-	cmd := ctx.command(t)
-	// Own process group so abort() can kill the whole tree (bash + compilers
-	// + docker). Platform-specific: see procattr_unix.go / procattr_windows.go.
+	cmd, container := ctx.command(t)
+	// Own process group so abort() can kill the whole tree (bash + compilers,
+	// or the docker client). Platform-specific: see procattr_unix.go /
+	// procattr_windows.go.
 	setProcGroup(cmd)
 
 	stdout, err := cmd.StdoutPipe()
@@ -51,6 +53,7 @@ func (r *runner) start(p *tea.Program, ctx *buildCtx, t Target) {
 	}
 	r.mu.Lock()
 	r.cmd = cmd
+	r.container = container
 	r.mu.Unlock()
 
 	go func() {
@@ -62,6 +65,7 @@ func (r *runner) start(p *tea.Program, ctx *buildCtx, t Target) {
 		err := cmd.Wait()
 		r.mu.Lock()
 		r.cmd = nil
+		r.container = ""
 		r.mu.Unlock()
 		p.Send(doneMsg{key: t.Key, err: err})
 	}()
@@ -72,6 +76,9 @@ func (r *runner) abort() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cmd != nil {
+		// The container first: the process group holds only the docker
+		// client, and the build inside would outlive it.
+		killContainer(r.container)
 		killGroup(r.cmd)
 	}
 }

@@ -226,6 +226,45 @@ func TestNDKVersionMatchesTheAndroidScript(t *testing.T) {
 	}
 }
 
+// repoCtx is a context on the real checkout, for what reads its files.
+func repoCtx(t *testing.T) *buildCtx {
+	t.Helper()
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &buildCtx{scriptsRoot: root}
+}
+
+func TestCommandNamesTheContainer(t *testing.T) {
+	onHost(t, "linux", true)
+	c := repoCtx(t)
+	verify, _ := targetByKey("verify")
+
+	cmd, name := c.command(verify)
+	if !regexp.MustCompile(`^libsmb2-build-verify-\d+-\d+$`).MatchString(name) {
+		t.Errorf("container name = %q, want libsmb2-build-verify-<pid>-<n>", name)
+	}
+	if !regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]+$`).MatchString(name) {
+		t.Errorf("container name %q is not one docker accepts", name)
+	}
+	if got := strings.Join(cmd.Args, " "); !strings.Contains(got, " --name "+name+" ") {
+		t.Errorf("command %q does not run in container %q", got, name)
+	}
+	// A second run of the same target gets another container.
+	if _, again := c.command(verify); again == name {
+		t.Errorf("two runs share the container name %q", name)
+	}
+
+	// Nothing to kill for a native build or an image build.
+	for _, key := range []string{"sources", "docker-image-linux"} {
+		target, _ := targetByKey(key)
+		if _, name := c.command(target); name != "" {
+			t.Errorf("%s: container name = %q, want none", key, name)
+		}
+	}
+}
+
 func TestFindAndroidNDK(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
