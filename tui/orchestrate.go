@@ -103,6 +103,23 @@ func (c *buildCtx) knobEnv() []string {
 	return env
 }
 
+// pinEnv returns, as K=V pairs, what the environment overrides of the pins:
+// every variable scripts/shared/_versions.sh takes from the environment
+// (`${VAR:-default}`: LIBSMB2_RELEASE, LIBSMB2_COMMIT, OPENSSL_VERSION, ...)
+// and SOURCE_DATE_EPOCH. A native build inherits the environment; a
+// container does not, and without these `LIBSMB2_RELEASE=r99 ./build all`
+// built the Docker targets as one release and the native ones as another.
+func (c *buildCtx) pinEnv() []string {
+	names, _ := versionDefaults(c.scriptsRoot)
+	var env []string
+	for _, name := range append(names, "SOURCE_DATE_EPOCH") {
+		if v := os.Getenv(name); v != "" {
+			env = append(env, name+"="+v)
+		}
+	}
+	return env
+}
+
 // containerSeq numbers the containers of this process.
 var containerSeq atomic.Uint64
 
@@ -123,7 +140,8 @@ func (c *buildCtx) dockerRunArgs(t Target, name string) []string {
 	if hostOS != "windows" {
 		args = append(args, "-u", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
 	}
-	for _, kv := range append(c.knobEnv(), t.env...) {
+	env := append(c.knobEnv(), c.pinEnv()...)
+	for _, kv := range append(env, t.env...) {
 		args = append(args, "-e", kv)
 	}
 	return append(args,

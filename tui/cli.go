@@ -84,6 +84,8 @@ EXAMPLES
 
 KNOBS (env, forwarded into Docker builds)
   JOBS=N  KEEP_BUILD=1  FORCE_DOWNLOAD=1
+  SOURCE_DATE_EPOCH and the pins of scripts/shared/_versions.sh
+  (LIBSMB2_RELEASE, LIBSMB2_COMMIT, OPENSSL_VERSION, ...) when set
 
 Outputs land in release_builds/. Apple targets require macOS; Linux, Windows
 and Verify run in Docker; Android needs the pinned NDK on the host. Android

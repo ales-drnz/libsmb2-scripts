@@ -243,6 +243,66 @@ func repoCtx(t *testing.T) *buildCtx {
 	return &buildCtx{scriptsRoot: root}
 }
 
+func TestDockerRunArgs(t *testing.T) {
+	onHost(t, "linux", true)
+	for _, v := range []string{"JOBS", "KEEP_BUILD", "FORCE_DOWNLOAD", "SOURCE_DATE_EPOCH",
+		"LIBSMB2_RELEASE", "LIBSMB2_COMMIT", "LIBSMB2_TARBALL_SHA256", "LIBSMB2_VERSION",
+		"LIBSMB2_BUNDLE_VERSION", "OPENSSL_VERSION", "OPENSSL_TARBALL_SHA256", "NDK_VERSION"} {
+		t.Setenv(v, "")
+	}
+	c := repoCtx(t)
+	target, _ := targetByKey("linux-aarch64")
+
+	args := c.dockerRunArgs(target, "some-name")
+	got := strings.Join(args, " ")
+	if !strings.HasPrefix(got, "run --rm --init --name some-name --platform=linux/amd64 ") {
+		t.Errorf("args start with %q, want run --rm --init --name some-name --platform=linux/amd64", got)
+	}
+	if want := " -e ARCHS=aarch64 -v " + c.scriptsRoot + ":/scripts -w /scripts " +
+		c.imageRef("linux") + " bash ./scripts/build_libsmb2_linux.sh"; !strings.HasSuffix(got, want) {
+		t.Errorf("args end with %q, want %q", got, want)
+	}
+	for _, kv := range args {
+		if strings.HasPrefix(kv, "LIBSMB2_") || strings.HasPrefix(kv, "SOURCE_DATE_EPOCH") {
+			t.Errorf("%s forwarded although the environment does not set it", kv)
+		}
+	}
+
+	// What the environment overrides of the pins reaches the container.
+	t.Setenv("LIBSMB2_RELEASE", "r99")
+	t.Setenv("OPENSSL_VERSION", "3.5.10")
+	t.Setenv("SOURCE_DATE_EPOCH", "1")
+	t.Setenv("JOBS", "2")
+	got = " " + strings.Join(c.dockerRunArgs(target, "some-name"), " ") + " "
+	for _, want := range []string{"JOBS=2", "LIBSMB2_RELEASE=r99", "OPENSSL_VERSION=3.5.10", "SOURCE_DATE_EPOCH=1", "ARCHS=aarch64"} {
+		if !strings.Contains(got, " -e "+want+" ") {
+			t.Errorf("args %q lack -e %s", got, want)
+		}
+	}
+	if strings.Contains(got, "LIBSMB2_COMMIT") {
+		t.Errorf("args %q forward LIBSMB2_COMMIT, which is not set", got)
+	}
+}
+
+func TestPinEnvCoversVersionsSh(t *testing.T) {
+	// Every `${VAR:-default}` of _versions.sh is forwarded when set, so a
+	// pin added there needs no change here.
+	c := repoCtx(t)
+	names, _ := versionDefaults(c.scriptsRoot)
+	if len(names) < 7 {
+		t.Fatalf("_versions.sh defaults = %q, want the libsmb2, OpenSSL and release pins", names)
+	}
+	for _, name := range names {
+		t.Setenv(name, "x-"+name)
+	}
+	got := strings.Join(c.pinEnv(), " ")
+	for _, name := range names {
+		if !strings.Contains(got, name+"=x-"+name) {
+			t.Errorf("pinEnv() = %q, lacks %s", got, name)
+		}
+	}
+}
+
 func TestCommandNamesTheContainer(t *testing.T) {
 	onHost(t, "linux", true)
 	c := repoCtx(t)
