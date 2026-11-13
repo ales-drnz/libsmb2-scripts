@@ -231,7 +231,7 @@ hooks:
 
 #### 4.3 Verifying
 
-`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds) and none of libcrypto's, that the licence texts of libsmb2 and OpenSSL are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, that every library is stripped (no `.symtab` on ELF, no `.debug_*` section or COFF symbol on PE, no local symbol in a Mach-O slice), the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, `smb2_scripts_release()` checked to return `LIBSMB2_RELEASE`, and a context created and destroyed.
+`./build verify` checks every library in `release_builds/` in the `verify` Docker image: that all nine are there and export every function in `verify/symbols.txt` (the ones `dart_smb2` binds), nothing outside `verify/exports.txt` (libsmb2's public API with the functions the patches add) and none of libcrypto's, that the licence texts of libsmb2 and OpenSSL are there and in both zips, that `SHA256SUMS` matches, the ELF or PE machine, that every library is stripped (no `.symtab` on ELF, no `.debug_*` section or COFF symbol on PE, no local symbol in a Mach-O slice), that the Linux and Android libraries are hardened (they import `__stack_chk_fail` and have full RELRO: a `GNU_RELRO` segment and `BIND_NOW`), the glibc 2.31 floor, the 16 KB alignment and libc-only dependencies on Android, the system-only imports on Windows, the slices and minimum OS on Apple, and the macOS framework symlinks. The library for the host's architecture is also loaded, its symbols resolved, `smb2_scripts_release()` checked to return `LIBSMB2_RELEASE`, and a context created and destroyed.
 
 #### 4.4 Publishing a release
 
@@ -246,7 +246,7 @@ hooks:
 
 `./build` is a small Go program ([Bubble Tea](https://github.com/charmbracelet/bubbletea)) that runs the shell scripts in `scripts/`, one per platform. Apple targets build with Xcode and Android with the NDK on the host; Linux, Windows and Verify run in a Docker image from `docker/Dockerfile`, which has one stage each.
 
-Each build downloads the pinned tarballs and checks their SHA-256, extracts a fresh tree, installs the static `config.h` (`scripts/shared/config/`), applies the patches, builds a static libcrypto per architecture with OpenSSL's own `Configure` and `make` (a minimal one: no shared library, engines, legacy provider or algorithms libsmb2 never asks for), compiles `lib/*.c` (all of libsmb2 except the Kerberos wrapper) and links one library that exports `lib/libsmb2.syms`, with libcrypto inside. The link order is fixed (`LC_ALL=C`), so the same sources give the same bytes.
+Each build downloads the pinned tarballs and checks their SHA-256, extracts a fresh tree, installs the static `config.h` (`scripts/shared/config/`), applies the patches, builds a static libcrypto per architecture with OpenSSL's own `Configure` and `make` (a minimal one: no shared library, engines, legacy provider or algorithms libsmb2 never asks for), compiles `lib/*.c` (all of libsmb2 except the Kerberos wrapper) with `-O2 -fstack-protector-strong -D_FORTIFY_SOURCE=2` and one section per function and object, and links one library that exports `lib/libsmb2.syms`, with libcrypto inside; the Linux and Android links add `-z relro -z now` and `--no-undefined`. The link order is fixed (`LC_ALL=C`), so the same sources give the same bytes.
 
 #### 5.1 The patch set
 
@@ -276,7 +276,7 @@ Links to directories: `unlink` opens the link itself (`FILE_OPEN_REPARSE_POINT`)
 #### 5.2 Bumping upstream libsmb2
 
 1. Set `LIBSMB2_COMMIT` and `LIBSMB2_TARBALL_SHA256` in `scripts/shared/_versions.sh`, and `LIBSMB2_RELEASE` to the next `rN`. OpenSSL is bumped the same way, with `OPENSSL_VERSION` and `OPENSSL_TARBALL_SHA256`; copy its `LICENSE.txt` to `licenses/openssl/` if it changed.
-2. Build: every patch applies again to the new tree, and one whose anchor moved stops the build. Drop the patches upstream now carries.
+2. Build: every patch applies again to the new tree, and one whose anchor moved stops the build. Drop the patches upstream now carries. When upstream's `lib/libsmb2.syms` or a patch changes the exports, copy the patched tree's `lib/libsmb2.syms` (`KEEP_BUILD=1`) over the list in `verify/exports.txt`, or `./build verify` fails on the new ones.
 3. Run `./build sources`, then `dart run tool/ffigen.dart` and `dart run tool/bindings_drift.dart` in `dart_smb2`.
 4. Push a `release/` branch and publish as in [4.4](#44-publishing-a-release).
 

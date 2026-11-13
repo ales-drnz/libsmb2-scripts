@@ -11,18 +11,21 @@
 # locally through `./build verify` and in CI.
 #
 #   all       the nine release assets are present, and each exports every
-#             symbol in verify/symbols.txt and none of libcrypto's
+#             symbol in verify/symbols.txt, nothing outside
+#             verify/exports.txt (libsmb2's public API with the functions
+#             the patches add) and none of libcrypto's
 #             (EVP_, OSSL_, OPENSSL_, CRYPTO_, ERR_, BIO_, ...);
 #             libsmb2's licence texts (COPYING, LICENCE-LGPL-2.1.txt) and
 #             OpenSSL's (LICENSE-OpenSSL.txt) are present and match
 #             licenses/;
 #             SHA256SUMS, when written, matches the files
-#   Linux     ELF machine per arch; stripped (no .symtab); no glibc symbol
+#   Linux     ELF machine per arch; stripped (no .symtab); hardened (stack
+#             protector, full RELRO); no glibc symbol
 #             newer than 2.31; the host-arch library is dlopened on this
 #             glibc 2.31 system, its symbols resolved, smb2_scripts_release()
 #             checked to return LIBSMB2_RELEASE, and a context created and
 #             destroyed
-#   Android   ELF machine per ABI; stripped; 16 KB segment alignment on the
+#   Android   ELF machine per ABI; stripped; hardened; 16 KB segment alignment on the
 #             64-bit ABIs; depends on nothing but libc / libdl / libm
 #   Windows   PE machine per arch; stripped (no .debug_* section, no COFF
 #             symbol table); imports only system DLLs (kernel32, ws2_32,
@@ -45,6 +48,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/shared/_versions.sh"
 RELEASE_DIR="${RELEASE_DIR:-$ROOT/release_builds}"
 SYMBOLS="$ROOT/verify/symbols.txt"
+EXPORTS="$ROOT/verify/exports.txt"
 
 for tool in readelf objdump llvm-objdump llvm-nm llvm-lipo unzip cc cmp sha256sum; do
   command -v "$tool" >/dev/null || {
@@ -62,6 +66,7 @@ fail() { echo "FAIL $*"; failed=$((failed + 1)); }
 ok() { echo "OK   $*"; }
 
 required_symbols() { grep -v -e '^#' -e '^[[:space:]]*$' "$SYMBOLS"; }
+allowed_exports() { grep -v -e '^#' -e '^[[:space:]]*$' "$EXPORTS"; }
 
 # check_exports <label> <file with one exported name per line>
 check_exports() {
@@ -71,6 +76,15 @@ check_exports() {
     fail "$label: missing exports: $(echo "$missing" | tr '\n' ' ')"
   else
     ok "$label: exports all $(required_symbols | wc -l) bound symbols"
+  fi
+  # Nothing beyond the public API: a symbol that is not in
+  # verify/exports.txt was exported by accident.
+  local stray
+  stray="$(sort -u "$exported" | comm -23 - <(allowed_exports | sort -u))"
+  if [ -n "$stray" ]; then
+    fail "$label: exports outside verify/exports.txt: $(echo "$stray" | tr '\n' ' ')"
+  else
+    ok "$label: its $(sort -u "$exported" | wc -l) exports are all in verify/exports.txt"
   fi
   check_no_libcrypto_exports "$label" "$exported"
 }
@@ -98,6 +112,26 @@ check_stripped() {
     fail "$1: not stripped (.symtab present)"
   else
     ok "$1: stripped"
+  fi
+}
+
+# check_hardened <name> <ELF file>: what the build's hardening flags leave
+# in the library. The stack protector imports __stack_chk_fail
+# (-fstack-protector-strong); full RELRO is a GNU_RELRO segment with every
+# relocation resolved at load time (-z relro -z now), so the GOT is
+# read-only while the library runs.
+check_hardened() {
+  local name="$1" file="$2" missing="" dynamic segments dynsyms
+  dynamic="$(readelf -dW "$file")"
+  segments="$(readelf -lW "$file")"
+  dynsyms="$(readelf --dyn-syms -W "$file")"
+  grep -Eq ' UND __stack_chk_fail( |@|$)' <<< "$dynsyms" || missing="$missing no-stack-protector"
+  grep -q 'GNU_RELRO' <<< "$segments" || missing="$missing no-GNU_RELRO"
+  grep -Eq 'BIND_NOW|\(FLAGS_1\).*NOW' <<< "$dynamic" || missing="$missing no-BIND_NOW"
+  if [ -n "$missing" ]; then
+    fail "$name: not hardened:$missing"
+  else
+    ok "$name: stack protector, full RELRO (BIND_NOW)"
   fi
 }
 
@@ -188,6 +222,7 @@ for arch in x86_64 aarch64; do
     *) fail "$name: wrong ELF machine ($(elf_machine "$f"))" ;;
   esac
   check_stripped "$name" "$f"
+  check_hardened "$name" "$f"
   newest="$(objdump -T "$f" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1)"
   if version_le "${newest:-0}" 2.31; then
     ok "$name: newest glibc symbol ${newest:-none} (floor 2.31)"
@@ -213,6 +248,7 @@ for abi in arm64-v8a armeabi-v7a x86_64; do
     *) fail "$name: wrong ELF machine ($machine)" ;;
   esac
   check_stripped "$name" "$f"
+  check_hardened "$name" "$f"
   if [ "$abi" != "armeabi-v7a" ]; then
     align="$(readelf -lW "$f" | awk '/LOAD/ {print $NF}' | sort -u)"
     for a in $align; do
