@@ -45,7 +45,6 @@ smb2_stat
 smb2_statvfs
 smb2_readlink
 smb2_truncate
-smb2_rename
 smb2_link
 smb2_symlink
 smb2_unlink
