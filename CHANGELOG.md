@@ -1,3 +1,44 @@
+## [0.4.0] - unreleased
+
+### Contributions
+- [@KuZaRV99](https://github.com/KuZaRV99): found that a handle the server keeps for a dead connection blocks the rename of an upload's temporary file, and proposed sharing delete ([#1](https://github.com/ales-drnz/libsmb2-scripts/pull/1)).
+
+### All platforms
+**Added**
+- `patch_open_share_delete.py` adds `smb2_open2()`, whose `SMB2_OPEN_SHARE_DELETE` adds `FILE_SHARE_DELETE` to that one open, for dart_smb2's temporary files. `smb2_open()` and every other open keep their share access.
+- `patch_read_write_eof.py`: `pread` and `pwrite` report 0 at the end of the file without reading the error reply as a read or write reply.
+- `patch_unlink_mkdir_status.py`: `unlink` and `mkdir` report the first failure of their CREATE + CLOSE, and record its NT status.
+- `patch_timestamps_before_epoch.py`: a FILETIME of 0, or before 1970, converts to 0 instead of wrapping to a far future date.
+- `patches/_patchlib.py`, which every patch uses: a patch writes nothing unless every anchor matched, counts its anchors, and does nothing on a second run.
+- `scripts/check_patches.sh` applies the patch set twice and in both orders to a fresh tree, and compiles the files it touches.
+- `verify/exports.txt` lists every symbol a library may export, and `verify` fails on any other.
+- `verify` fails on a Linux or Android library without a stack protector or full RELRO.
+- CI has a lint job: gofmt, `go vet`, `go test`, ShellCheck and `check_patches.sh`.
+
+**Changed**
+- The libraries are `libsmb2-r12`.
+- Every library is compiled with `-fstack-protector-strong`, `-D_FORTIFY_SOURCE=2` and a section per function and object.
+- A build fails when a patch finds its own change in a tree it has just extracted.
+- `verify/symbols.txt` lists `smb2_open2` and no longer `smb2_rename`, which is still exported.
+- The pins overridden in the environment (`LIBSMB2_RELEASE`, `LIBSMB2_COMMIT`, ...) reach the Docker builds.
+- The NDK version and the `SOURCE_DATE_EPOCH` default are each set in one place.
+- `tui/main.go` is split by screen.
+
+**Fixed**
+- `pread` and `pwrite` free their call data when the request cannot be built.
+- `smb2_utimes_async()` does not call the callback when it returns an error.
+- Aborting a Docker build from the TUI, or with Ctrl-C in a headless build, stops the container and not only the docker client.
+- `patch_compound_callbacks.py` and `patch_utimes.py` no longer apply a second time to a tree they patched.
+- A checkout with CRLF line endings no longer breaks `verify`: `.gitattributes` keeps the lists in `verify/`, `*.conf` and `build` at LF.
+
+### Linux and Android
+**Changed**
+- The libraries are linked with `-z relro -z now` and `--no-undefined`.
+
+### macOS
+**Added**
+- CI loads the macOS library it built and checks the release it reports.
+
 ## [0.3.0] - 8-11-2026
 
 ### All platforms
