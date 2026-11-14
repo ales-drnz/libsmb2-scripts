@@ -62,6 +62,6 @@ export NDK_VERSION="${NDK_VERSION:-28.2.13676358}"
 # Tag suffix of the GitHub release the binaries are published under
 # (libsmb2-<release> on github.com/ales-drnz/dart_smb2). Recorded in
 # manifest.json, and baked into every library by patch_scripts_release.py:
-# smb2_scripts_release() returns it ("r11"), and dart_smb2 refuses a libsmb2
+# smb2_scripts_release() returns it ("r12"), and dart_smb2 refuses a libsmb2
 # that names another release.
-export LIBSMB2_RELEASE="${LIBSMB2_RELEASE:-r11}"
+export LIBSMB2_RELEASE="${LIBSMB2_RELEASE:-r12}"
