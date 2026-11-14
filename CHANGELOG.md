@@ -1,3 +1,21 @@
+## [0.4.1] - unreleased
+
+### All platforms
+**Added**
+- `verify/hostile`: a fake SMB2 server that answers one request with a malformed reply (`hostile_server.py`, 902 cases), a proxy that mutates the replies of a real server, and a harness built with ASan and UBSan against the patched tree (`build_asan.sh`).
+- `verify/hostile/check_regressions.py` runs the cases of `regressions.tsv`, the ones each patch below answers for; the lint job of CI runs it.
+
+**Changed**
+- The libraries are `libsmb2-r13`.
+
+**Fixed**
+- `patch_oplock_break_ack_callback.py`: a server could stop the process with a few oplock break notifications nobody asked for. libsmb2 acknowledged each one with a request that had no callback, and the reply to it made the client call address 0. Found with the hostile server; no memory is written.
+- `patch_wait_abort.py`: after a reply that could not be parsed, `smb2_destroy_context()` ran the callbacks of requests still queued on data freed long before, a use after free. A sync call whose wait fails now completes what is queued, and a call on a connection that is gone fails at once instead of after its timeout.
+- `patch_reply_stall_timeout.py`: a reply that stopped arriving after its header, or that announced more bytes than it sent, kept the call waiting for ever whatever `smb2_set_timeout()` said, during the connect too. It now times out and the connection is closed; a large reply that keeps arriving is not cut.
+- `patch_session_setup_legs.py`: a server that answered every leg of the session setup with `STATUS_MORE_PROCESSING_REQUIRED` kept the connect going for ever. It ends after sixteen legs.
+- `patch_guest_tree_connect.py`: on SMB 3.1.1 a logon the server maps to guest was refused the share with `STATUS_ACCESS_DENIED`, because libsmb2 signed the TREE_CONNECT of a session that has no key. It goes unsigned unless signing was asked for.
+- `smb2_utimes()` and `smb2_rename2()` free their call data when their wait fails after the request completed.
+
 ## [0.4.0] - 14-11-2026
 
 ### Contributions
