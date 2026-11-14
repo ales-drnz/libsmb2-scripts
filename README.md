@@ -2,7 +2,7 @@
 
 #### Patched libsmb2, built for every platform.
 
-[![](https://img.shields.io/badge/libsmb2--scripts-0.3.0-7DCFFF.svg?style=for-the-badge)](CHANGELOG.md)
+[![](https://img.shields.io/badge/libsmb2--scripts-0.4.0-7DCFFF.svg?style=for-the-badge)](CHANGELOG.md)
 [![](https://img.shields.io/badge/libsmb2-master%202026--11--07-orange.svg?style=for-the-badge)](https://github.com/sahlberg/libsmb2)
 [![](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/github/stars/ales-drnz/libsmb2-scripts?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ales-drnz/libsmb2-scripts)
