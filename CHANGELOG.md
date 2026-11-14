@@ -1,4 +1,4 @@
-## [0.4.0] - unreleased
+## [0.4.0] - 14-11-2026
 
 ### Contributions
 - [@KuZaRV99](https://github.com/KuZaRV99): found that a handle the server keeps for a dead connection blocks the rename of an upload's temporary file, and proposed sharing delete ([#1](https://github.com/ales-drnz/libsmb2-scripts/pull/1)).
