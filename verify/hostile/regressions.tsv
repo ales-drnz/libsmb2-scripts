@@ -1,2 +1,3 @@
 # patch	cases (a regular expression on the names of hostile_cases.py)
 patch_oplock_break_ack_callback.py	^unsolicited_oplock_break_
+patch_wait_abort.py	^flush_structsize_|^flush_(success|warning)_status_error_body$|^compound_reversed$

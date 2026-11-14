@@ -161,6 +161,9 @@ int smb2_rename2(struct smb2_context *smb2, const char *oldpath,
 
         rc = wait_for_reply(smb2, cb_data);
         if (rc < 0) {
+                if (cb_data->is_finished) {
+                        goto out;
+                }
                 cb_data->status = SMB2_STATUS_CANCELLED;
                 return rc;
         }
