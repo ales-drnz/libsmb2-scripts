@@ -1,3 +1,4 @@
 # patch	cases (a regular expression on the names of hostile_cases.py)
 patch_oplock_break_ack_callback.py	^unsolicited_oplock_break_
 patch_wait_abort.py	^flush_structsize_|^flush_(success|warning)_status_error_body$|^compound_reversed$
+patch_reply_stall_timeout.py	_body_cut_to_\d+$|_header_only(_negotiate|_echo)?$|_status_error_body$|_error_status_success_body$|^nb_len_(00ffffff_stall|01000000|plus100_stall)_|^error_status_80000000$|_stall$|^neg_secbuf_promised_never_sent$
