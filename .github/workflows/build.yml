@@ -38,7 +38,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Orchestrator (gofmt, go vet, go test)
@@ -60,6 +60,15 @@ jobs:
       # changes nothing, and the files they touch compile with warnings on.
       - name: Patch set
         run: bash scripts/check_patches.sh
+      # What a hostile server once did to the client (a crash, a use after
+      # free, a call that never returns) stays fixed: the cases of
+      # verify/hostile/regressions.tsv against an ASan + UBSan build of the
+      # patched tree, with the runner's clang and libcrypto.
+      - name: Hostile server regressions
+        run: |
+          verify/hostile/build_asan.sh "$RUNNER_TEMP/hostile"
+          python3 verify/hostile/check_regressions.py \
+            "$RUNNER_TEMP/hostile/asan/harness" "$RUNNER_TEMP/hostile/out"
 
   linux:
     name: Linux

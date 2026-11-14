@@ -202,7 +202,7 @@ These variables are passed to the builds:
 
 #### 3.5 On GitHub Actions
 
-Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31. The macOS job loads the library it has built the same way. A `lint` job builds nothing: it runs `gofmt`, `go vet` and `go test` on the orchestrator, ShellCheck on the scripts, and `scripts/check_patches.sh`.
+Every push to a `release/` branch, and every pull request, runs `.github/workflows/build.yml`: it builds all nine libraries on GitHub's runners, Apple included (`macos-26`, with Xcode 26.6 pinned through `DEVELOPER_DIR`), collects them with `manifest.json`, `SHA256SUMS` and the licence texts in a `libsmb2-release` artifact, and checks them as in [4.3](#43-verifying) on an x86_64 and an arm64 runner, so both Linux libraries are also loaded on glibc 2.31. The macOS job loads the library it has built the same way. A `lint` job builds nothing: it runs `gofmt`, `go vet` and `go test` on the orchestrator, ShellCheck on the scripts, and `scripts/check_patches.sh`, and the hostile-server regressions of `verify/hostile` against an ASan build of the patched tree.
 
 ---
 
@@ -257,18 +257,23 @@ Every patch is a Python script with a docstring that says why it exists. It find
 | :--- | :--- | :--- |
 | `patch_compound_callbacks.py` | shared | calls every callback of a compound that times out before it is sent, so rmdir, unlink and the other path calls report the timeout |
 | `patch_create_data_leaks.py` | shared | frees the call data of `unlink`, `mkdir`, `ftruncate`, `pread` and `pwrite` when their first request cannot be built |
+| `patch_guest_tree_connect.py` | shared | leaves the TREE_CONNECT of a guest or null session unsigned on SMB 3.1.1, where the session has no key and a server that maps unknown users to guest refused the share |
 | `patch_nterror_reporting.py` | shared | records the NT status on open and timeout failures |
+| `patch_oplock_break_ack_callback.py` | shared | gives the acknowledgement of an oplock or lease break a callback: the reply to it made the client call address 0, so a few notifications nobody asked for stopped the process |
 | `patch_open_share_delete.py` | shared | adds `smb2_open2()`, whose `SMB2_OPEN_SHARE_DELETE` lets one open share delete, for the temporary files `dart_smb2` writes and renames into place: a handle the server keeps for a connection that died no longer blocks their rename or removal |
 | `patch_poll_eintr.py` | shared | retries the sync API's `poll()` on `EINTR` |
 | `patch_read_write_eof.py` | shared | makes `pread` and `pwrite` report 0 at end of file without reading the error reply as a read or write reply |
+| `patch_reply_stall_timeout.py` | shared | times out a reply that stops arriving after its header, during the connect too, and closes the connection; a reply that keeps arriving is not cut |
 | `patch_rename_replace.py` | shared | adds `smb2_rename2()`, whose `SMB2_RENAME_REPLACE_IF_EXISTS` replaces an existing file in one step, behind `dart_smb2`'s `rename(..., overwrite: true)` |
 | `patch_scripts_release.py` | shared | adds `smb2_scripts_release()`, which returns the release the library was built as (`LIBSMB2_RELEASE`, e.g. `"r13"`), so `dart_smb2` refuses a libsmb2 of another release or of upstream |
+| `patch_session_setup_legs.py` | shared | ends a session setup after sixteen legs, where a server could keep the connect going for ever |
 | `patch_rmdir_disposition.py` | shared | makes `rmdir` fail on a directory that is not empty |
 | `patch_timestamps_before_epoch.py` | shared | gives a time before 1970, such as the 0 of a time the server does not keep, as 0 instead of a date far in the future |
 | `patch_truncate_non_directory.py` | shared | makes `truncate` fail on a directory |
 | `patch_unlink_non_directory.py` | shared | makes `unlink` fail on a directory, and so on a link to one (see below) |
 | `patch_unlink_mkdir_status.py` | shared | makes `unlink` and `mkdir` report the first failure of their CREATE + CLOSE, with its NT status |
 | `patch_utimes.py` | shared | adds `smb2_utimes()`, behind `dart_smb2`'s `setFileTimes` |
+| `patch_wait_abort.py` | shared | completes every queued request when the wait of a sync call fails, so `smb2_destroy_context()` no longer runs callbacks on data freed long before, and fails a call on a closed connection at once |
 | `patch_windows_csprng.py` | windows | uses `BCryptGenRandom` for the client challenge, salt and nonce |
 | `patch_windows_headers.py` | windows | builds with llvm-mingw's headers |
 | `patch_windows_sockets.py` | windows | keeps 64-bit socket handles whole |
