@@ -1,4 +1,4 @@
-## [0.4.1] - unreleased
+## [0.4.1] - 15-11-2026
 
 ### All platforms
 **Added**
