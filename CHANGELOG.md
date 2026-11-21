@@ -1,3 +1,22 @@
+## [0.5.0] - unreleased
+
+### All platforms
+**Changed**
+- The libraries are `libsmb2-r14`, built from upstream master of 20-11-2026: the `libsmb2-7.0.0` release, the first since 6.2, and the fixes after it. Upstream changed its API and ABI, but not in any call `dart_smb2` binds: its bindings regenerate unchanged.
+- Upstream now carries seven of the patches, which are gone: `patch_oplock_break_ack_callback.py`, `patch_read_write_eof.py`, `patch_session_setup_legs.py`, `patch_create_data_leaks.py` and `patch_poll_eintr.py` were sent upstream from here and merged as they were; `patch_compound_callbacks.py` gave way to upstream's reference-counted compound callbacks; `patch_timestamps_before_epoch.py` to upstream's conversion of times before 1970.
+- A session setup that needs more than sixteen legs fails with `EACCES`, as upstream fails every other session setup, instead of `ECONNREFUSED`.
+- A time before 1970, such as the 0 of a time the server does not keep, is a negative number of seconds, as upstream gives it, instead of 0.
+- `patch_nterror_reporting.py` only records the NT status of a timeout: upstream records the one of a failed open.
+- `patch_unlink_mkdir_status.py` only records the NT status of a CLOSE that fails after its CREATE succeeded: upstream now reports the first failure of the compound.
+- `patch_wait_abort.py` leaves `stat`, `fstat` and `statvfs` alone: upstream frees their data itself when the wait fails after the reply came.
+- `verify/exports.txt` lists `smb2_decode_filenotifychangeinformation` and `smb2_get_libsmb2Version`, which upstream now exports.
+- `verify/hostile/regressions.tsv` keeps the cases of the patches upstream took, under the upstream commit that answers for them.
+
+### Windows
+**Changed**
+- `patch_windows_csprng.py` follows upstream's new layout of `smb2_random_bytes()`; Windows still has no strong source upstream.
+- `patch_windows_headers.py` no longer adds `config.h` to `compat.c`, and `patch_windows_sockets.py` no longer scopes the `struct linger` fallback: upstream does both since its native MinGW build.
+
 ## [0.4.1] - 15-11-2026
 
 ### All platforms
