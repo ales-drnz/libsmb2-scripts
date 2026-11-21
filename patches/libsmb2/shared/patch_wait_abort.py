@@ -20,7 +20,8 @@ before it reports the failure, while the data their callbacks reach is
 that of the call that is failing. The error the caller reads stays the one
 of the failure. A call whose callback has run this way frees its own data
 in place of leaving it to a callback that will not come again, as
-smb2_close() already did.
+smb2_close() already did. stat, fstat and statvfs do the same upstream
+since c94a9e1 and are left as they are.
 
 A call on a context whose connection is gone (closed by a failure, or by
 patch_reply_stall_timeout.py) waited for its whole timeout before it said
@@ -169,7 +170,7 @@ p.replace(
     "                }\n"
     "                cb_data->status = SMB2_STATUS_CANCELLED;\n"
     "                return rc;\n",
-    count=20,
+    count=17,
 )
 p.replace(
     "lib/sync.c",

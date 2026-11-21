@@ -12,16 +12,15 @@ made these failures unreadable ("previous unrelated error" instead of e.g.
 STATUS_OBJECT_NAME_NOT_FOUND).
 
 Upstream sets it in the stat, fstat, truncate, rename and echo callbacks
-since 8fa34fd. This adds smb2_set_nterror() where it is still missing:
-  - the generic open/create callback (create_cb_1), which set only the
-    text with smb2_set_error(), so smb2_get_nterror() kept an earlier status
-  - the timeout sweep (lib/pdu.c), which records SMB2_STATUS_IO_TIMEOUT
-    before it calls a timed-out request's callback, so a timeout that no
-    callback reports itself (echo, read, write, ...) no longer leaves the
-    status of an earlier failure behind
+since 8fa34fd, and in the generic open/create callback (create_cb_1) since
+de3c632 (libsmb2 7.0.0). This adds it where it is still missing: the
+timeout sweep (lib/pdu.c) now records SMB2_STATUS_IO_TIMEOUT before it
+calls a timed-out request's callback, so a timeout that no callback
+reports itself (echo, read, write, ...) no longer leaves the status of an
+earlier failure behind.
 
-patch_compound_callbacks.py edits the same place (the outqueue branch of
-smb2_timeout_pdus()); both anchor so that they apply in either order.
+patch_reply_stall_timeout.py adds a third branch after the two queues and
+records the status itself; the two patches apply in either order.
 
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
@@ -38,30 +37,26 @@ p = Patch(
     sentinel=("lib/pdu.c", 'smb2_set_nterror(smb2, SMB2_STATUS_IO_TIMEOUT, "%s",'),
 )
 
-replacements = [
-    # Generic open/create callback: use set_nterror so the NT status survives.
-    (
-        '                smb2_set_error(smb2, "Create failed with status %s.", '
-        "nterror_to_str(status));\n",
-        "                smb2_set_nterror(smb2, status,\n"
-        '                                 "Create failed with status %s.",\n'
-        "                                 nterror_to_str(status));\n",
-    ),
-]
-
-for old, new in replacements:
-    p.replace("lib/libsmb2.c", old, new)
-
-# lib/pdu.c: the timeout sweep, outqueue and waitqueue.
-old = (
-    "                        pdu->cb(smb2, SMB2_STATUS_IO_TIMEOUT, NULL,\n"
-    "                                pdu->cb_data);\n"
-)
-new = (
+record = (
     "                        smb2_set_nterror(smb2, SMB2_STATUS_IO_TIMEOUT, \"%s\",\n"
     "                                         nterror_to_str(SMB2_STATUS_IO_TIMEOUT));\n"
-    + old
 )
-p.replace("lib/pdu.c", old, new, count=2)
 
-p.done("Patched lib/libsmb2.c, lib/pdu.c: NT status recorded on create failures and timeouts")
+# lib/pdu.c: the timeout sweep. The outqueue branch fires every pdu of an
+# unsent compound, the waitqueue branch one pdu.
+old = (
+    "                         * siblings' references.\n"
+    "                         */\n"
+    "                        for (p = pdu; p; p = p->next_compound) {\n"
+)
+p.replace("lib/pdu.c", old, old.replace(
+    "                        for (p = pdu;", record + "                        for (p = pdu;"))
+
+old = (
+    "                        SMB2_LIST_REMOVE(&smb2->waitqueue, pdu);\n"
+    "                        if (pdu->cb) {\n"
+)
+p.replace("lib/pdu.c", old, old.replace(
+    "                        if (pdu->cb) {", record + "                        if (pdu->cb) {"))
+
+p.done("Patched lib/pdu.c: NT status recorded on timeouts")

@@ -9,13 +9,18 @@
 # it directly.
 
 # ── libsmb2 ──────────────────────────────────────────────────────────────────
-# Pinned to upstream master at 2026-11-07 (libsmb2-6.2-606-ga52c157). Since
-# r10 (4d9ce67) upstream fixed, on the client side: zero-length reads and
-# writes, which failed (30fa5ae) and now keep a CreditCharge of 1 (aa8299d),
-# the format of a copychunk error reply, now told by its size (14f3bd7),
-# and the encoding and decoding of lease and oplock breaks and their
-# acknowledgements (a52c157, a32e704, 497e707, 7a1f7b4). None of the local
-# patches is carried upstream yet.
+# Pinned to upstream master at 2026-11-20 (libsmb2-7.0.0-25-gc7996bb):
+# the libsmb2-7.0.0 release, the first from master since 6.2, and after it
+# the bounds on negotiated I/O sizes and reply lengths (69f5941, which stops
+# a server that negotiates a read size of 0 from writing past the caller's
+# buffer), signing across partial reads (9486279) and stat results kept
+# alive after a failed wait (c94a9e1). Since the previous pin (a52c157)
+# upstream took six of the local patches, as the commits sent from here
+# (1882fd7, 702558e, a0ceca2, 62367d5, 6dfddd9) and as the reference-
+# counted compound callbacks of #516, and replaced a seventh (timestamps
+# before 1970 are now negative seconds, 177a9de). Those patches are gone;
+# nterror_reporting and unlink_mkdir_status keep only what upstream does
+# not do yet.
 #
 # OpenSSL is on (HAVE_OPENSSL in config.h): libsmb2 signs and seals through
 # libcrypto, and offers AES-256-GCM and AES-128-GCM ahead of AES-128-CCM on
@@ -31,16 +36,16 @@
 # On bump: update LIBSMB2_COMMIT + LIBSMB2_TARBALL_SHA256 (sha256sum of the
 # GitHub codeload tarball), re-run every patch (they fail loudly if an anchor
 # drifted), and rebuild all platforms.
-export LIBSMB2_COMMIT="${LIBSMB2_COMMIT:-a52c1571a1ff223bde5bb3df9fec7af5ce3855d4}"
-export LIBSMB2_TARBALL_SHA256="${LIBSMB2_TARBALL_SHA256:-c150c934c1353f1f903261c8c51cd605cd3f59beff1e4619240cf059729f18fb}"
+export LIBSMB2_COMMIT="${LIBSMB2_COMMIT:-c7996bb97601a7f04d3e5c371317425da9b82ba4}"
+export LIBSMB2_TARBALL_SHA256="${LIBSMB2_TARBALL_SHA256:-1208fe411700e6cfab41e843d18de3398dccd77390cc9c964e81353213c34685}"
 
 # Human-readable marker of what the commit is (informational only —
 # the commit hash above is what the build actually uses).
-export LIBSMB2_VERSION="${LIBSMB2_VERSION:-7.0.0-dev+git20261107.a52c157}"
+export LIBSMB2_VERSION="${LIBSMB2_VERSION:-7.0.0+git20261120.c7996bb}"
 
 # Numeric form for Apple bundle versions (CFBundleShortVersionString):
-# `git describe` of the pin is libsmb2-6.2-606-ga52c157.
-export LIBSMB2_BUNDLE_VERSION="${LIBSMB2_BUNDLE_VERSION:-6.2.606}"
+# `git describe` of the pin is libsmb2-7.0.0-25-gc7996bb.
+export LIBSMB2_BUNDLE_VERSION="${LIBSMB2_BUNDLE_VERSION:-7.0.25}"
 
 # ── OpenSSL ──────────────────────────────────────────────────────────────────
 # libcrypto for libsmb2's signing and sealing (AES-128/256-GCM, AES-128-CCM,
@@ -62,6 +67,6 @@ export NDK_VERSION="${NDK_VERSION:-28.2.13676358}"
 # Tag suffix of the GitHub release the binaries are published under
 # (libsmb2-<release> on github.com/ales-drnz/dart_smb2). Recorded in
 # manifest.json, and baked into every library by patch_scripts_release.py:
-# smb2_scripts_release() returns it ("r13"), and dart_smb2 refuses a libsmb2
+# smb2_scripts_release() returns it ("r14"), and dart_smb2 refuses a libsmb2
 # that names another release.
-export LIBSMB2_RELEASE="${LIBSMB2_RELEASE:-r13}"
+export LIBSMB2_RELEASE="${LIBSMB2_RELEASE:-r14}"

@@ -68,11 +68,11 @@ patch("lib/init.c", [
     ),
     # 2. The CNG source itself, ahead of the POSIX ones.
     (
-        "#else /* !HAVE_ARC4RANDOM_BUF */\n"
+        "#else /* !HAVE_ARC4RANDOM_BUF, or Linux with getrandom or urandom */\n"
         "\n"
         "#ifdef HAVE_GETRANDOM\n",
 
-        "#else /* !HAVE_ARC4RANDOM_BUF */\n"
+        "#else /* !HAVE_ARC4RANDOM_BUF, or Linux with getrandom or urandom */\n"
         "\n"
         "#ifdef HAVE_BCRYPT_GENRANDOM\n"
         "        {\n"

@@ -2,13 +2,13 @@
 # All rights reserved.
 # Use of this source code is governed by BSD 3-Clause license that can be found in the LICENSE file.
 
-"""Header hygiene for llvm-mingw: asprintf fallbacks + config.h in compat.c.
+"""Header hygiene for llvm-mingw: the asprintf fallbacks.
 
-Two upstream assumptions break under the llvm-mingw toolchain we build with,
-which is newer than the mingw runtimes upstream targets.
+An upstream assumption breaks under the llvm-mingw toolchain we build
+with, which is newer than the mingw runtimes upstream targets.
 
-1. include/asprintf.h — asprintf/vasprintf redefinition
-------------------------------------------------------
+include/asprintf.h — asprintf/vasprintf redefinition
+----------------------------------------------------
 The fallback implementations are guarded with `#ifndef vasprintf` /
 `#ifndef asprintf`. Those test for *macros*, but modern mingw-w64 declares
 asprintf/vasprintf as real *functions* in <stdio.h>, so the guards never fire
@@ -26,24 +26,10 @@ function that was never defined:
 Upstream's own guard shows the intent: mingw supplies these itself. Extend
 that same condition to the two fallbacks instead of inventing a new rule.
 
-2. lib/compat.c — never includes config.h, so NEED_* is invisible
------------------------------------------------------------------
-compat.c guards its POSIX shims (random(), srandom(), getlogin_r(), ...)
-behind NEED_RANDOM / NEED_SRANDOM / NEED_GETLOGIN_R, but — unlike every other
-file in lib/ — it never performs the `#ifdef HAVE_CONFIG_H #include "config.h"`
-dance. The switches defined in our config.h therefore never reach it and the
-shims are compiled out, leaving lib/init.c unresolved at link time:
+lib/compat.c used to need config.h for its NEED_* switches as well;
+upstream includes it there since 8baba1f.
 
-    ld.lld: error: undefined symbol: random
-    >>> referenced by init.o:(smb2_random_bytes)
-    ld.lld: error: undefined symbol: srandom
-    ld.lld: error: undefined symbol: getlogin_r
-
-Add the same preamble the rest of lib/ uses. compat.c tests no HAVE_* macros
-at all, so pulling config.h in changes nothing beyond making the NEED_*
-switches visible.
-
-Touches: include/asprintf.h, lib/compat.c
+Touches: include/asprintf.h
 
 The script is BSD-3-Clause; the code it adds to libsmb2 is distributed
 under libsmb2's LGPL-2.1-or-later.
@@ -83,20 +69,4 @@ patch("include/asprintf.h", [
     ),
 ])
 
-patch("lib/compat.c", [
-    (
-        "*/\n"
-        "\n"
-        "#include \"compat.h\"\n",
-
-        "*/\n"
-        "#ifdef HAVE_CONFIG_H\n"
-        "#include \"config.h\"\n"
-        "#endif\n"
-        "\n"
-        "#include \"compat.h\"\n",
-    ),
-])
-
-p.done("Patched: asprintf/vasprintf mingw guards, "
-      "config.h in compat.c (asprintf.h, compat.c)")
+p.done("Patched: asprintf/vasprintf mingw guards (asprintf.h)")

@@ -13,10 +13,12 @@ server's extra_fdset hook takes an `int *`.
 
 Also:
 
-  - struct linger: mingw's <winsock2.h> already defines it; upstream's
-    !HAVE_LINGER fallback redefinition collides — scope it to !_WIN32.
-  - libsmb2.h pulls in <windows.h>: define WIN32_LEAN_AND_MEAN first so
-    consumers don't drag the whole Win32 API (and its macro pollution) in.
+  - libsmb2.h pulls in <windows.h> through the Winsock headers: define
+    WIN32_LEAN_AND_MEAN first so consumers don't drag the whole Win32 API
+    (and its macro pollution) in.
+
+The !HAVE_LINGER fallback of struct linger, which collided with the one in
+mingw's <winsock2.h>, is scoped to !_WIN32 upstream since 8baba1f.
 
 Touches: lib/socket.c, include/smb2/libsmb2.h
 
@@ -40,10 +42,6 @@ def patch(relpath, pairs):
 
 patch("lib/socket.c", [
     (
-        "#if !defined(HAVE_LINGER)\n",
-        "#if !defined(HAVE_LINGER) && !defined(_WIN32)\n",
-    ),
-    (
         "connect_async_ai(struct smb2_context *smb2, const struct addrinfo *ai, int *fd_out)\n",
         "connect_async_ai(struct smb2_context *smb2, const struct addrinfo *ai, t_socket *fd_out)\n",
     ),
@@ -62,11 +60,13 @@ patch("lib/socket.c", [
 
 patch("include/smb2/libsmb2.h", [
     (
-        "#if defined(_WINDOWS)\n",
-        "#if defined(_WINDOWS)\n"
+        "#if defined(_WINDOWS) || defined(__MINGW32__)\n"
+        "#ifdef __USE_WINSOCK__\n",
+        "#if defined(_WINDOWS) || defined(__MINGW32__)\n"
         "#ifndef WIN32_LEAN_AND_MEAN\n"
         "#define WIN32_LEAN_AND_MEAN\n"
-        "#endif\n",
+        "#endif\n"
+        "#ifdef __USE_WINSOCK__\n",
     ),
 ])
 
